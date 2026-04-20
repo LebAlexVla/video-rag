@@ -1,6 +1,6 @@
 namespace VideoLectureRagAssistant.Domain.Entities;
 
-public sealed class RetrievedContext
+public sealed record class RetrievedContext
 {
     public RetrievedContext(
         string chunkId,

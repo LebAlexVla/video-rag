@@ -1,6 +1,6 @@
 namespace VideoLectureRagAssistant.Domain.Entities;
 
-public sealed class SourceCitation
+public sealed record class SourceCitation
 {
     public SourceCitation(
         string lectureTitle,

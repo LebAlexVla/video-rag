@@ -1,6 +1,6 @@
 namespace VideoLectureRagAssistant.Domain.Entities;
 
-public sealed class TranscriptSegment
+public sealed record class TranscriptSegment
 {
     public TranscriptSegment(
         int index,

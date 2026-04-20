@@ -1,6 +1,6 @@
 namespace VideoLectureRagAssistant.Domain.Entities;
 
-public sealed class LectureChunk
+public sealed record class LectureChunk
 {
     public LectureChunk(
         string chunkId,
