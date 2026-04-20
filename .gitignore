@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+data/jobs/*
+data/transcripts/*
+!data/transcripts/.gitkeep
+!data/jobs/.gitkeep
