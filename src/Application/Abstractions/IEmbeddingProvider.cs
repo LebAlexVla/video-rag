@@ -2,5 +2,14 @@ namespace VideoLectureRagAssistant.Application.Abstractions;
 
 public interface IEmbeddingProvider
 {
-    // TODO: Define IEmbeddingProvider members.
+    string ProviderName { get; }
+    string ModelName { get; }
+
+    Task<float[]> EmbedAsync(
+        string text,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<float[]>> EmbedBatchAsync(
+        IReadOnlyList<string> texts,
+        CancellationToken cancellationToken = default);
 }

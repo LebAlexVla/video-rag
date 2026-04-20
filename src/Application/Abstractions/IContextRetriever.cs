@@ -1,6 +1,10 @@
+using VideoLectureRagAssistant.Application.Contracts;
+
 namespace VideoLectureRagAssistant.Application.Abstractions;
 
 public interface IContextRetriever
 {
-    // TODO: Define IContextRetriever members.
+    Task<ContextRetrievalResult> RetrieveAsync(
+        AskRequest request,
+        CancellationToken cancellationToken = default);
 }

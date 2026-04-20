@@ -1,6 +1,10 @@
+using VideoLectureRagAssistant.Application.Contracts;
+
 namespace VideoLectureRagAssistant.Application.Abstractions;
 
 public interface IAskService
 {
-    // TODO: Define IAskService members.
+    Task<AskResponse> AskAsync(
+        AskRequest request,
+        CancellationToken cancellationToken = default);
 }

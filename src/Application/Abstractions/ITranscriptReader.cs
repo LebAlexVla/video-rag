@@ -1,6 +1,10 @@
+using VideoLectureRagAssistant.Domain.Entities;
+
 namespace VideoLectureRagAssistant.Application.Abstractions;
 
 public interface ITranscriptReader
 {
-    // TODO: Define ITranscriptReader members.
+    Task<Transcript> ReadAsync(
+        string transcriptPath,
+        CancellationToken cancellationToken = default);
 }
