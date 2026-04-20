@@ -1,6 +1,11 @@
 namespace VideoLectureRagAssistant.Application.Contracts;
 
-public class LectureRebuildRequest
+public sealed record class LectureRebuildRequest
 {
-    // TODO: Implement LectureRebuildRequest.
+    public LectureRebuildRequest(bool clearIndexFirst = true)
+    {
+        ClearIndexFirst = clearIndexFirst;
+    }
+
+    public bool ClearIndexFirst { get; }
 }
