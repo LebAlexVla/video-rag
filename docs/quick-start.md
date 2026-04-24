@@ -172,7 +172,7 @@ http://localhost:5000/health
 
 ## 9. Открыть Razor UI
 
-Открой в браузере:
+Открыть в браузере:
 
 ```text
 http://localhost:5000
