@@ -152,7 +152,7 @@ def transcribe_with_faster_whisper(payload: InputPayload, source_path: Path) -> 
 
         segments.append(
             {
-                "index": index,
+                "index": len(segments),
                 "startSec": start_sec,
                 "endSec": end_sec,
                 "text": text,

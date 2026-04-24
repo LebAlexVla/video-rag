@@ -14,11 +14,15 @@ using VideoLectureRagAssistant.Infrastructure.VideoSources;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddRazorPages();
+
 ConfigureOptions(builder.Services, builder.Configuration);
 ConfigureHttpClients(builder.Services);
 ConfigureApplicationServices(builder.Services);
 
 var app = builder.Build();
+
+app.UseStaticFiles();
 
 if (TryGetCliCommand(args, out var cliCommand))
 {
@@ -36,6 +40,8 @@ if (TryGetCliCommand(args, out var cliCommand))
 }
 
 MapEndpoints(app);
+
+app.MapRazorPages();
 
 app.Run();
 
