@@ -5,6 +5,9 @@ obj/
 *.user
 *.suo
 data/jobs/*
+data/videos/*
 data/transcripts/*
+data/registry/*
 !data/transcripts/.gitkeep
 !data/jobs/.gitkeep
+scripts/python-helper/data/*

@@ -1,322 +1,453 @@
 # Implementation Guide
 
-## 1. Назначение документа
+Практические правила для разработки и расширения проекта.
 
-Этот документ нужен для старта разработки. Он фиксирует:
-- структуру проекта;
-- размещение интерфейсов и реализаций;
-- состав Domain и Application;
-- рекомендуемый порядок реализации;
-- правила расширения;
-- признаки архитектурных нарушений.
+Документ отвечает на вопросы:
 
-Документ не пересказывает обзор проекта и не дублирует архитектурный документ. Его задача — помочь команде быстро начать писать код, не споря о слоях, контрактах и папках.
+- куда класть код;
+- какие зависимости допустимы;
+- как добавлять новые реализации провайдеров;
+- что считается архитектурным нарушением;
+- какие минимальные тесты нужны.
 
----
-
-## 2. Структура проекта
+## Структура C# проекта
 
 ```text
-/src
-  /Domain
-    /Entities
-      Lecture.cs
-      Transcript.cs
-      TranscriptSegment.cs
-      LectureChunk.cs
-      RetrievedContext.cs
-      SourceCitation.cs
-      AnswerResult.cs
+src/
+  Domain/
+    Entities/
 
-  /Application
-    /Abstractions
-      IVideoSource.cs
-      ITranscriptionRunner.cs
-      ITranscriptReader.cs
-      IChunker.cs
-      IEmbeddingProvider.cs
-      IVectorStore.cs
-      IContextRetriever.cs
-      IAnswerGenerator.cs
-      ILectureIngestService.cs
-      IAskService.cs
+  Application/
+    Abstractions/
+    Contracts/
+    Services/
 
-    /Contracts
-      AskRequest.cs
-      AskResponse.cs
-      LectureIngestRequest.cs
-      LectureIngestResult.cs
-      LectureRebuildRequest.cs
-      LectureRebuildResult.cs
-      ContextRetrievalResult.cs
-      VideoSourceDescriptor.cs
-      TranscriptionRunRequest.cs
-      TranscriptionRunResult.cs
-      EmbeddedLectureChunk.cs
-      ErrorInfo.cs
+  Infrastructure/
+    VideoSources/
+    Transcription/
+    Transcript/
+    Embeddings/
+    VectorStore/
+    Answers/
+    Configuration/
 
-    /Services
-      AskService.cs
-      LectureIngestService.cs
-      ContextRetriever.cs
-      AnswerGenerator.cs
-      Chunker.cs
-
-  /Infrastructure
-    /VideoSources
-      LocalFileVideoSource.cs
-
-    /Transcription
-      PythonTranscriptionRunner.cs
-
-    /Transcript
-      JsonTranscriptReader.cs
-
-    /Embeddings
-      OllamaEmbeddingProvider.cs
-      OpenAiEmbeddingProvider.cs
-
-    /VectorStore
-      QdrantVectorStore.cs
-
-    /Answers
-      OllamaAnswerGenerator.cs
-      OpenAiAnswerGenerator.cs
+Pages/
+  Index.cshtml
+  Index.cshtml.cs
+  _ViewImports.cshtml
 ```
 
----
+## Domain
 
-## 3. Как распределять код по слоям
+`Domain` содержит предметные сущности и их инварианты.
+
+Примеры:
+
+```text
+Lecture
+Transcript
+TranscriptSegment
+LectureChunk
+RetrievedContext
+SourceCitation
+AnswerResult
+```
+
+В `Domain` можно класть:
+
+- сущности предметной области;
+- value objects;
+- простые инварианты модели.
+
+В `Domain` нельзя класть:
+
+- DTO API;
+- DTO CLI;
+- JSON-модели helper;
+- Qdrant payload models;
+- interfaces внешних интеграций;
+- зависимости на SDK, HTTP, файловую систему, Qdrant, Ollama, OpenAI.
+
+Правило: если тип описывает внешний транспорт или конкретный сценарий приложения, это не `Domain`.
+
+## Application
+
+`Application` содержит прикладные сценарии, contracts и abstractions.
+
+Application делится на три зоны:
+
+```text
+Application/Abstractions
+Application/Contracts
+Application/Services
+```
+
+### Application/Abstractions
+
+Здесь лежат interfaces, через которые application layer работает с внешним миром.
+
+Примеры:
+
+```text
+IVideoSource
+ITranscriptionRunner
+ITranscriptReader
+IChunker
+IEmbeddingProvider
+IVectorStore
+IContextRetriever
+IAnswerGenerator
+ILectureIngestService
+IAskService
+```
+
+Правила:
+
+- interfaces внешних зависимостей лежат здесь;
+- application services зависят от interfaces, а не от concrete classes;
+- новые provider interfaces добавляются только если существующих abstractions недостаточно.
+
+Не нужно добавлять интерфейс, если он не используется для реальной границы или замены реализации.
+
+### Application/Contracts
+
+Здесь лежат DTO и contracts прикладных сценариев.
+
+Примеры:
+
+```text
+AskRequest
+AskResponse
+LectureIngestRequest
+LectureIngestResult
+LectureRebuildRequest
+LectureRebuildResult
+ContextRetrievalResult
+TranscriptionRunRequest
+TranscriptionRunResult
+VideoSourceDescriptor
+EmbeddedLectureChunk
+ErrorInfo
+```
+
+Правила:
+
+- request/response models для application services лежат здесь;
+- промежуточные модели между application и infrastructure лежат здесь;
+- contracts должны быть независимы от SDK и конкретных провайдеров.
+
+### Application/Services
+
+Здесь лежит orchestration и прикладная логика.
+
+Примеры:
+
+```text
+AskService
+LectureIngestService
+ContextRetriever
+AnswerGenerator
+Chunker
+```
+
+Application services могут:
+
+- валидировать прикладные requests;
+- вызывать abstractions;
+- управлять последовательностью сценария;
+- применять business/application rules;
+- возвращать contracts.
+
+Application services не должны:
+
+- напрямую создавать HTTP clients;
+- напрямую обращаться к Qdrant;
+- напрямую вызывать Ollama/OpenAI SDK;
+- напрямую запускать Python process;
+- содержать UI-логику.
+
+## Infrastructure
+
+`Infrastructure` содержит concrete implementations interfaces из `Application/Abstractions`.
+
+Примеры:
+
+```text
+LocalFileVideoSource
+PythonTranscriptionRunner
+JsonTranscriptReader
+OllamaEmbeddingProvider
+OpenAiEmbeddingProvider
+QdrantVectorStore
+OllamaAnswerGenerator
+OpenAiAnswerGenerator
+QdrantInitializationService
+```
+
+В `Infrastructure` можно класть:
+
+- работу с HTTP;
+- работу с файловой системой;
+- запуск внешнего процесса;
+- Qdrant integration;
+- Ollama/OpenAI integration;
+- чтение и валидацию внешнего JSON;
+- provider-specific code;
+- configuration options.
+
+В `Infrastructure` нельзя класть:
+
+- orchestration всего use case;
+- UI-логику;
+- правила выбора пользовательского сценария;
+- domain decisions, которые не зависят от внешней интеграции.
+
+## Pages
+
+`Pages` — UI-слой для локального Razor test/demo UI.
+
+Он находится отдельно от `src/Domain`, `src/Application` и `src/Infrastructure`, потому что это входной слой приложения, а не часть бизнес-логики.
+
+Примеры:
+
+```text
+Pages/Index.cshtml
+Pages/Index.cshtml.cs
+Pages/_ViewImports.cshtml
+```
+
+### Правила для PageModel
+
+PageModel может зависеть от:
+
+```text
+IAskService
+```
+
+PageModel не должен зависеть от:
+
+```text
+QdrantVectorStore
+OllamaAnswerGenerator
+OpenAiAnswerGenerator
+OllamaEmbeddingProvider
+PythonTranscriptionRunner
+JsonTranscriptReader
+HttpClient for providers
+Qdrant HTTP API
+Ollama HTTP API
+OpenAI HTTP API
+```
+
+PageModel должен:
+
+- принимать UI input;
+- валидировать форму на уровне UI;
+- создавать application request;
+- вызывать application service;
+- показывать result/error.
+
+PageModel не должен:
+
+- выполнять retrieval;
+- строить embeddings;
+- генерировать prompt;
+- обращаться к Qdrant;
+- обращаться к Ollama/OpenAI;
+- запускать Python helper;
+- читать transcript files напрямую.
+
+## CLI / API composition
+
+CLI и Minimal API являются входными слоями.
+
+Они могут:
+
+- принимать аргументы/HTTP requests;
+- создавать application contracts;
+- вызывать application services;
+- возвращать ответ пользователю.
+
+Они не должны напрямую работать с infrastructure classes.
+
+Composition root связывает interfaces и implementations через DI. Это единственное место, где допустимо знать concrete infrastructure classes.
+
+## Как добавлять новый transcription provider
+
+Transcription provider добавляется внутри Python helper.
+
+Правила:
+
+- входной JSON C# -> Python не должен ломаться;
+- выходной `transcript.json` должен сохранять тот же контракт;
+- exit codes должны оставаться совместимыми;
+- Python не должен выполнять chunking;
+- Python не должен строить embeddings;
+- Python не должен писать в Qdrant;
+- Application C# не должен знать детали конкретного transcription provider.
+
+Если нужно выбрать provider, выбор передаётся через существующие поля request/config, например:
+
+```text
+transcriptionProvider
+transcriptionModel
+```
+
+## Как добавлять новый embedding provider
+
+Новый embedding provider добавляется как implementation `IEmbeddingProvider`.
+
+Куда класть:
+
+```text
+src/Infrastructure/Embeddings/
+```
+
+Что нужно сделать:
+
+1. Реализовать `IEmbeddingProvider`.
+2. Добавить provider-specific options в configuration.
+3. Зарегистрировать реализацию в DI.
+4. Документировать vector size.
+5. Проверить совместимость с Qdrant collection.
+6. Добавить минимальные tests/parsing checks, если provider возвращает сложный JSON.
+
+Правила:
+
+- provider должен возвращать стабильную размерность vectors;
+- `EmbedAsync` и `EmbedBatchAsync` должны быть согласованы;
+- пустой input должен обрабатываться предсказуемо;
+- смена embedding model/provider/vector space требует rebuild;
+- embeddings разных моделей нельзя смешивать в одной collection.
+
+## Как добавлять новый answer provider
+
+Новый answer provider добавляется как implementation `IAnswerGenerator`.
+
+Куда класть:
+
+```text
+src/Infrastructure/Answers/
+```
+
+Что нужно сделать:
+
+1. Реализовать `IAnswerGenerator`.
+2. Добавить provider-specific options в configuration.
+3. Зарегистрировать реализацию в DI.
+4. Сохранить правило grounded answer.
+5. Добавить fallback rule в prompt.
+
+Правила:
+
+- generator получает только вопрос и найденный context;
+- generator не должен выполнять retrieval;
+- generator не должен строить embeddings;
+- generator не должен обращаться к Qdrant;
+- generator не должен отвечать по внешним знаниям, если контекста недостаточно.
+
+Prompt должен явно запрещать добавление фактов вне контекста.
+
+## Как добавлять downloader в будущем
+
+Downloader добавляется как новая implementation `IVideoSource`.
+
+Куда класть:
+
+```text
+src/Infrastructure/VideoSources/
+```
+
+Целевое поведение:
+
+```text
+input URL/path -> local video file path
+```
+
+Правила:
+
+- после `ResolveAsync` pipeline должен получить локальный файл;
+- downstream ingest flow не должен знать, был файл локальным или скачанным;
+- скачивание не должно смешиваться с транскрибацией;
+- downloader не должен вызывать Python helper;
+- downloader не должен писать в Qdrant;
+- downloader не должен менять transcript contract.
+
+Если downloader требует сложной политики retry/cache/auth, это отдельное архитектурное решение.
+
+## Rebuild и embedding space
+
+Rebuild используется для ручной пересборки индекса.
+
+Правила:
+
+- rebuild использует сохранённые `transcript.json`;
+- rebuild не обязан повторно запускать Python helper;
+- rebuild может очищать индекс перед повторной записью;
+- при смене embedding space старый индекс считается несовместимым.
+
+Если меняется vector size, простого clear points может быть недостаточно. Нужно удалить старую Qdrant collection или volume и затем выполнить ingest/rebuild заново.
+
+## Минимальные правила тестирования
+
+Минимально полезные tests:
 
 ### Domain
 
-В `Domain` лежат только предметные сущности и их инварианты:
-- `Lecture`
-- `Transcript`
-- `TranscriptSegment`
-- `LectureChunk`
-- `RetrievedContext`
-- `SourceCitation`
-- `AnswerResult`
-
-Сюда не кладутся:
-- DTO сценариев;
-- JSON-модели helper;
-- модели payload для Qdrant;
-- интерфейсы внешних зависимостей.
-
-Практический критерий простой: если модель описывает предметную сущность и не зависит от транспорта, SDK и конкретного сценария, это `Domain`.
+- создание валидных entities;
+- ошибка при пустых обязательных полях;
+- ошибка при невалидных timestamps;
+- проверка порядка transcript segments.
 
 ### Application
 
-`Application` содержит прикладные контракты, интерфейсы и orchestration-сервисы.
-
-#### `Application/Abstractions`
-Здесь лежат все интерфейсы:
-- `IVideoSource`
-- `ITranscriptionRunner`
-- `ITranscriptReader`
-- `IChunker`
-- `IEmbeddingProvider`
-- `IVectorStore`
-- `IContextRetriever`
-- `IAnswerGenerator`
-- `ILectureIngestService`
-- `IAskService`
-
-Если появляется новый интерфейс для интеграции или для прикладного сценария, он почти всегда должен лежать именно здесь.
-
-#### `Application/Contracts`
-Здесь лежат DTO и прикладные контракты:
-- `AskRequest`
-- `AskResponse`
-- `LectureIngestRequest`
-- `LectureIngestResult`
-- `LectureRebuildRequest`
-- `LectureRebuildResult`
-- `ContextRetrievalResult`
-- `VideoSourceDescriptor`
-- `TranscriptionRunRequest`
-- `TranscriptionRunResult`
-- `EmbeddedLectureChunk`
-- `ErrorInfo`
-
-Это не Domain, потому что эти модели описывают входы и выходы сценариев, промежуточные данные и результаты интеграций.
-
-#### `Application/Services`
-Здесь лежат orchestration-сервисы:
-- `AskService`
-- `LectureIngestService`
-- `ContextRetriever`
-- `AnswerGenerator`
-- `Chunker`
-
-Даже если конкретная реализация простая, это всё равно `Application`, потому что здесь живёт прикладная логика, а не техническая интеграция.
+- `Chunker` сохраняет порядок текста;
+- `Chunker` выставляет chunk indexes;
+- `Chunker` выставляет примерные timestamps;
+- `ContextRetriever` применяет `TopK` и `MinScore`;
+- `AskService` возвращает fallback при пустом context;
+- `LectureIngestService` корректно обрабатывает ошибку transcription runner.
 
 ### Infrastructure
 
-В `Infrastructure` лежат concrete-реализации и технические адаптеры:
-- `LocalFileVideoSource`
-- `PythonTranscriptionRunner`
-- `JsonTranscriptReader`
-- `OllamaEmbeddingProvider`
-- `OpenAiEmbeddingProvider`
-- `QdrantVectorStore`
-- `OllamaAnswerGenerator`
-- `OpenAiAnswerGenerator`
+- `JsonTranscriptReader` читает валидный transcript;
+- `JsonTranscriptReader` падает на невалидном transcript;
+- provider response parsing tests;
+- Qdrant request payload shape tests, если возможно без реального Qdrant.
 
-`Infrastructure` не должна становиться местом, где живёт orchestration use case или правила прикладных сценариев.
+### UI
 
----
+- PageModel создаёт `AskRequest`;
+- PageModel вызывает `IAskService`;
+- PageModel не содержит infrastructure calls.
 
-## 4. Базовые правила реализации
+Не нужно начинать с тяжёлых end-to-end tests. Сначала достаточно unit tests на стабильные правила.
 
-- C# — центр системы.
-- Python helper только транскрибирует и пишет `transcript.json`.
-- Chunking выполняется в C#.
-- Интерфейсы лежат в `Application/Abstractions`.
-- `Infrastructure` содержит только реализации.
-- Основной интерфейс MVP: `CLI ingest + Minimal API ask`.
-- Telegram bot — optional.
-- Web UI — вне MVP.
-- `ILLMProvider` не используется как основной контракт MVP.
+## Признаки архитектурных нарушений
 
-Если новая реализация не укладывается в эти правила, это уже архитектурное изменение, а не обычная деталь реализации.
+Нарушение, если:
 
----
+- Python helper делает chunking;
+- Python helper строит embeddings;
+- Python helper пишет в Qdrant;
+- Python helper отвечает пользователю;
+- между C# и Python появляется internal REST/gRPC/queue;
+- API endpoint напрямую вызывает Qdrant;
+- Razor PageModel напрямую вызывает infrastructure implementation;
+- Application service создаёт concrete infrastructure class;
+- Domain зависит от Application или Infrastructure;
+- Infrastructure содержит полный use case orchestration;
+- Qdrant используется как общая база приложения;
+- embeddings разных моделей смешиваются в одной collection;
+- Razor UI становится основным продуктовым frontend-контуром;
+- добавляется downloader без сохранения локального файла как результата `IVideoSource`.
 
-## 5. Что писать первым
+## Общее правило
 
-Рекомендуемый порядок такой:
+Если новая логика относится к сценарию пользователя — вероятно, это `Application`.
 
-### Шаг 1. Каркас проекта
-Сначала определить:
-- Domain entities;
-- Application contracts;
-- Application abstractions.
+Если новая логика относится к внешней системе, файлам, HTTP, SDK или процессам — вероятно, это `Infrastructure`.
 
-Это даёт стабильную основу и позволяет нескольким людям работать параллельно без расхождения по контрактам.
+Если новая логика только принимает ввод и показывает результат — это входной слой: CLI, API или Pages.
 
-### Шаг 2. Вертикаль ingest
-Реализовать:
-- `LocalFileVideoSource`
-- `PythonTranscriptionRunner`
-- `JsonTranscriptReader`
-- `Chunker`
-- основной `IEmbeddingProvider`
-- `QdrantVectorStore`
-- `LectureIngestService`
-
-Цель этого этапа — довести до конца ingest одной лекции и убедиться, что данные реально попадают в Qdrant.
-
-### Шаг 3. Вертикаль ask
-Реализовать:
-- `ContextRetriever`
-- `AnswerGenerator`
-- `AskService`
-- Minimal API endpoint
-
-Цель — получить рабочий ответ по уже проиндексированной лекции.
-
-### Шаг 4. Rebuild
-Добавить:
-- `ClearAsync` в vector store;
-- `RebuildAsync` в ingest service.
-
-### Шаг 5. Optional
-Только после этого:
-- Telegram bot;
-- резервный provider ответа;
-- резервный provider embeddings.
-
-Практическое правило: пока не работает полный путь `ingest -> Qdrant -> ask`, не стоит тратить время на optional-функции.
-
-Отдельное правило MVP:
-- сначала команда выбирает один основной рабочий стек провайдеров и доводит до конца именно его;
-- не нужно одновременно реализовывать несколько равноправных комбинаций embeddings/answer providers;
-- запасные провайдеры допустимы только после того, как стабильно работает основной путь `ingest -> transcript -> chunking -> embeddings -> Qdrant -> ask -> answer`.
-
-Для первой реализации приоритет должен быть у локального рабочего стека.
-
----
-
-## 6. Правила расширения
-
-### Новый provider транскрибации
-
-Добавляется в Python helper.
-
-Обязательные условия:
-- тот же входной JSON;
-- тот же выходной JSON;
-- те же инварианты;
-- отсутствие влияния на orchestration C#.
-
-C# не должен знать детали конкретного провайдера транскрибации.
-
-### Новый provider векторов
-
-Добавляется как новая реализация `IEmbeddingProvider`.
-
-Обязательные условия:
-- реализует `EmbedAsync` и `EmbedBatchAsync`;
-- фиксирует имя провайдера и модели;
-- документирует размерность embeddings.
-
-Если меняется embedding space, требуется rebuild.
-
-### Новый provider ответа
-
-Добавляется как новая реализация `IAnswerGenerator`.
-
-Обязательные условия:
-- принимает вопрос и найденный контекст;
-- возвращает `AnswerResult`;
-- не меняет `IAskService`.
-
-Генератор ответа не должен выполнять retrieval и не должен работать с Qdrant напрямую.
-
-### Downloader в будущем
-
-Добавляется как новая реализация `IVideoSource`.
-
-После `ResolveAsync` система по-прежнему должна получить локальный путь к файлу. Весь pipeline после этого момента должен остаться прежним.
-
----
-
-## 7. Что считается нарушением архитектуры
-
-### Нарушения границы C# ↔ Python
-- внутренний REST между C# и Python;
-- Python как сервис;
-- запись в Qdrant из Python;
-- chunking в Python;
-- ответ пользователю из Python.
-
-### Нарушения слоёв
-- интерфейсы в `Domain`;
-- concrete-реализации в `Application`;
-- прямой вызов Qdrant SDK из API-контроллеров;
-- прямой вызов OpenAI/Ollama из API-контроллеров;
-- orchestration use case в `Infrastructure`.
-
-### Нарушения MVP
-- использовать `ILLMProvider` как главный контракт;
-- делать Telegram обязательной частью MVP;
-- добавлять обязательный web UI;
-- внедрять downloader в основной объём первой версии;
-- строить дедупликацию и versioning;
-- проектировать MVP вокруг word-level timestamps.
-
----
-
-## 8. Практический ориентир для команды
-
-Команда движется правильно, если:
-- сначала появляется стабильный каркас моделей и интерфейсов;
-- затем начинает работать ingest одной лекции;
-- после этого появляется рабочий ask;
-- rebuild добавляется как отдельный управляемый шаг;
-- optional-возможности не мешают довести основной путь до рабочего состояния.
-
-Если появляется желание одновременно строить bot, downloader, web UI и несколько альтернативных провайдеров до того, как работает основной сценарий, это почти наверняка ошибка приоритизации.
+Если новая модель описывает предметную сущность и не зависит от транспорта — это `Domain`.

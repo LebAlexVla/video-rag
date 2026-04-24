@@ -1,301 +1,369 @@
 # Architecture
 
-## 1. Архитектурная идея
+## Архитектурная идея
 
-Архитектура MVP намеренно упрощена. Система строится вокруг одного основного C# приложения, которое управляет всеми сценариями: ingest, ask и rebuild. Python используется не как второй backend, а как узкий вспомогательный инструмент для транскрибации. Qdrant используется только как vector store. Всё запускается локально, без внутренней сетевой инфраструктуры между частями системы.
+Video Lecture RAG Assistant строится как локальное C# приложение, которое управляет всеми основными сценариями: ingest, ask и rebuild.
 
-Цель такой архитектуры — сократить интеграционные риски и сделать систему достаточно простой для команды студентов, не жертвуя базовой расширяемостью.
-
----
-
-## 2. Простая схема всей системы
+Главное правило архитектуры:
 
 ```text
-                 +----------------------+
-                 |      Пользователь    |
-                 |   ask / ingest /     |
-                 |      rebuild         |
-                 +----------+-----------+
-                            |
-                            v
-                 +----------------------+
-                 |     C# приложение    |
-                 |----------------------|
-                 | CLI / API / services |
-                 | ask / ingest /       |
-                 | rebuild orchestration|
-                 +----+------------+----+
-                      |            |
-                      |            v
-                      |      +-----------+
-                      |      |  Qdrant   |
-                      |      +-----------+
-                      |
-                      v
-              +-------------------+
-              | Python CLI helper |
-              |-------------------|
-              | transcription     |
-              | -> transcript.json|
-              +---------+---------+
-                        |
-                        v
-                 +-------------+
-                 | local files |
-                 +-------------+
+C# — центр системы.
+Python — только CLI-helper для транскрибации.
+Qdrant — только vector store.
 ```
 
----
+Система намеренно не делится на микросервисы. Для MVP важнее простой локальный запуск, понятные границы и минимальное число moving parts.
 
-## 3. Роли основных частей системы
+## Общая схема
 
-## 3.1 C# приложение
+```text
+                     +----------------------+
+                     |      User / Admin    |
+                     +----------+-----------+
+                                |
+              +-----------------+-----------------+
+              |                                   |
+              v                                   v
+        +-----------+                       +-------------+
+        | Razor UI  |                       | CLI / API   |
+        | test/demo |                       | ingest/ask  |
+        +-----+-----+                       +------+------+
+              |                                    |
+              +-----------------+------------------+
+                                |
+                                v
+                    +-----------------------+
+                    |     C# application    |
+                    |-----------------------|
+                    | orchestration         |
+                    | chunking              |
+                    | embeddings            |
+                    | retrieval             |
+                    | answer generation     |
+                    +----+--------------+---+
+                         |              |
+                         |              v
+                         |       +-------------+
+                         |       |   Qdrant    |
+                         |       | vector store|
+                         |       +-------------+
+                         |
+                         v
+                +-------------------+
+                | Python CLI helper |
+                | transcription     |
+                +---------+---------+
+                          |
+                          v
+                  +---------------+
+                  | local files   |
+                  +---------------+
 
-Это центральная часть системы. Оно отвечает за:
+External local provider:
+- Ollama for embeddings and answer generation
+```
 
-- команды и API;
-- orchestration ingest;
-- orchestration ask;
-- orchestration rebuild;
+## Роли компонентов
+
+### C# application
+
+C# приложение отвечает за:
+
+- CLI-команды;
+- Minimal API;
+- локальный Razor UI;
+- orchestration сценариев;
+- запуск Python helper;
 - чтение `transcript.json`;
 - chunking;
 - построение embeddings;
 - запись и поиск в Qdrant;
-- генерацию ответа;
+- вызов модели ответа;
+- rebuild индекса;
 - прикладную валидацию и обработку ошибок.
 
-Ключевое правило: **вся основная логика системы находится в C#**.
+C# не должен отдавать orchestration другому процессу или языку.
 
----
+### Python helper
 
-## 3.2 Python helper
-
-Это отдельный CLI-скрипт, который запускается из C# как внешний процесс.
+Python helper — внешний CLI-скрипт, который запускается из C#.
 
 Он отвечает только за:
-- чтение локального видео;
-- транскрибацию;
-- запись `transcript.json`;
-- возврат кода завершения.
 
-Python helper не отвечает за:
-- chunking;
-- embeddings;
-- Qdrant;
-- retrieval;
-- answer generation;
-- API;
-- webhook.
+- чтение локального видеофайла;
+- запуск транскрибации;
+- создание `transcript.json`;
+- возврат exit code и диагностической информации.
 
-Главная граница MVP: **Python только готовит транскрипт, C# делает всё остальное**.
+Python helper не должен:
 
----
+- выполнять chunking;
+- строить embeddings;
+- писать в Qdrant;
+- искать контекст;
+- генерировать ответ пользователю;
+- поднимать HTTP API;
+- быть вторым backend.
 
-## 3.3 Qdrant
+### Qdrant
 
-Qdrant используется как отдельное векторное хранилище.
+Qdrant используется только как vector store.
 
 Он хранит:
-- embeddings чанков;
-- текст чанков;
-- метаданные лекции и чанка.
 
-Он не используется как:
-- база пользователей;
-- job storage;
-- chat history storage;
-- общая операционная БД.
+- vectors chunks;
+- текст chunks;
+- metadata для retrieval:
+  - `chunkId`;
+  - `lectureId`;
+  - `lectureTitle`;
+  - `chunkIndex`;
+  - `approxMinute`;
+  - примерные временные границы.
 
----
+Qdrant не используется для:
 
-## 3.4 Файловая система
+- пользователей;
+- истории чатов;
+- статусов задач;
+- конфигурации;
+- общей операционной базы приложения.
+
+### Ollama
+
+Ollama используется как локальный provider для:
+
+- embeddings;
+- answer generation.
+
+C# обращается к Ollama через infrastructure adapters, реализующие application interfaces.
+
+Ollama не должен вызываться напрямую из UI, API endpoint или Application services в обход abstractions.
+
+### Файловая система
 
 Файловая система используется для:
-- исходных видео;
-- входных JSON для Python helper;
-- выходных `transcript.json`;
-- конфигурации;
-- временных файлов.
 
----
+- исходных видеофайлов;
+- job input/output файлов для Python helper;
+- сохранённых `transcript.json`;
+- registry/manifest для rebuild;
+- локальной конфигурации.
 
-## 4. Ingest flow
+Rebuild должен опираться на сохранённые transcript-файлы, а не требовать повторной транскрибации.
+
+### Razor UI
+
+Razor UI — локальный test/demo-интерфейс.
+
+Он нужен для удобной ручной проверки ask-сценария.
+
+Правила:
+
+- Razor UI не является основным MVP-контрактом.
+- Основной контракт остаётся Minimal API `/ask`.
+- Razor PageModel может зависеть от `IAskService`.
+- Razor UI не должен напрямую работать с Qdrant, Ollama, OpenAI, Python helper или файловой системой.
+- Razor UI не должен содержать retrieval logic или answer generation logic.
+
+## Ingest flow
+
+Назначение: подготовить локальную лекцию к поиску.
 
 ```text
 Admin
  -> CLI ingest
- -> C# ILectureIngestService
- -> IVideoSource.ResolveAsync
- -> ITranscriptionRunner.RunAsync
- -> Python helper
+ -> C# application
+ -> ILectureIngestService
+ -> IVideoSource
+ -> ITranscriptionRunner
+ -> Python CLI helper
  -> transcript.json
- -> ITranscriptReader.ReadAsync
- -> IChunker.Chunk
- -> IEmbeddingProvider.EmbedBatchAsync
- -> IVectorStore.UpsertLectureChunksAsync
+ -> ITranscriptReader
+ -> IChunker
+ -> IEmbeddingProvider
+ -> IVectorStore
+ -> Qdrant
 ```
 
-### Что здесь важно
+Ключевые правила:
 
-1. Администратор передаёт путь к локальному видео.
-2. C# нормализует источник и запускает helper.
-3. Python helper пишет `transcript.json`.
-4. C# валидирует JSON и переводит его в доменную модель.
-5. Chunking выполняется только в C#.
-6. Построение embeddings выполняется только в C#.
-7. Запись в Qdrant выполняется только из C#.
+- входом является локальный видеофайл;
+- Python только создаёт transcript;
+- C# валидирует transcript;
+- chunking выполняется в C#;
+- embeddings строятся в C# через provider abstraction;
+- запись в Qdrant выполняется только из C#.
 
-### Практический смысл
+## Ask flow
 
-Если в реализации chunking окажется в Python, это уже отклонение от канонической архитектуры.
-
----
-
-## 5. Ask flow
+Назначение: ответить на вопрос по уже проиндексированным лекциям.
 
 ```text
 User
- -> Minimal API /ask
- -> IAskService.AskAsync
- -> IContextRetriever.RetrieveAsync
- -> IEmbeddingProvider.EmbedAsync(question)
- -> IVectorStore.SearchAsync
- -> IAnswerGenerator.GenerateAsync
+ -> Minimal API /ask or Razor UI
+ -> IAskService
+ -> IContextRetriever
+ -> IEmbeddingProvider
+ -> IVectorStore
+ -> Qdrant
+ -> IAnswerGenerator
  -> AskResponse
 ```
 
-### Что здесь важно
+Ключевые правила:
 
-1. Вопрос валидируется на входе.
-2. Для вопроса строится embedding.
-3. Выполняется similarity search в Qdrant.
-4. Применяются `TopK` и `MinScore`.
-5. Если подходящего контекста нет или найденный контекст не проходит порог достаточной релевантности, система возвращает fallback.
-6. Только если контекст признан достаточным, генератор ответа формирует итоговый ответ.
-
-### Где что выполняется
-
-- embedding вопроса — C#;
-- retrieval — C#;
-- answer generation — C#;
+- вопрос проходит через `IAskService`;
+- embedding вопроса строится в C#;
+- retrieval выполняется через `IVectorStore`;
+- фильтрация по релевантности выполняется в application layer;
+- answer generator получает только найденный контекст;
+- если контекста недостаточно, система возвращает fallback;
 - Python в ask flow не участвует.
 
----
+## Rebuild flow
 
-## 6. Rebuild flow
+Назначение: вручную пересобрать индекс.
 
 ```text
 Admin
  -> CLI rebuild
- -> ILectureIngestService.RebuildAsync
- -> IVectorStore.ClearAsync
- -> повторное чтение сохранённых transcript.json
- -> IChunker.Chunk
- -> IEmbeddingProvider.EmbedBatchAsync
- -> IVectorStore.UpsertLectureChunksAsync
+ -> ILectureIngestService
+ -> read registry
+ -> read saved transcript.json
+ -> IChunker
+ -> IEmbeddingProvider
+ -> IVectorStore
+ -> Qdrant
 ```
 
-### Когда rebuild нужен
+Ключевые правила:
 
-- изменился provider embeddings;
-- изменилась модель embeddings;
-- изменилась размерность embeddings;
-- индекс нужно очистить после ошибок или повторного ingest.
-
-### Почему rebuild ручной
-
-Для MVP объём данных маленький. Проще и надёжнее дать админу явную операцию rebuild, чем строить автоматическое переиндексирование.
-
-### Источник данных для rebuild
-
-В MVP rebuild выполняется на основе уже сохранённых `transcript.json`.
-
-Это означает:
+- rebuild — явная ручная операция;
+- rebuild не должен автоматически запускаться при изменении конфигурации;
+- rebuild использует сохранённые transcript-файлы;
 - rebuild не обязан повторно запускать Python helper;
-- rebuild повторно читает сохранённые транскрипты, заново выполняет chunking, строит embeddings и записывает индекс;
-- если сохранённых `transcript.json` нет, rebuild для такой лекции считается недоступным без повторного ingest.
+- при смене embedding space старый индекс считается несовместимым.
 
-### Что должно быть сохранено после ingest
+Если изменилась размерность embeddings, может потребоваться удалить старую Qdrant collection или volume перед повторной индексацией.
 
-Чтобы rebuild был реально выполним, после успешного ingest C# должен сохранить:
-- `transcript.json`;
-- стабильный `lectureId`;
-- минимальную metadata-запись или manifest/registry, из которого видно:
-  - какая лекция существует;
-  - где лежит её `transcript.json`;
-  - какое имя лекции использовать при повторной индексации.
+## Граница C# ↔ Python
 
-В MVP формат этого registry может быть простым локальным JSON-файлом. Отдельная база для этого не требуется.
+Связь между C# и Python строится через:
 
----
+- запуск внешнего процесса;
+- входной JSON;
+- выходной JSON;
+- exit code;
+- stdout/stderr для диагностики.
 
-## 7. Граница C# ↔ Python
+Разрешено:
 
-Это самая важная граница в системе.
+- запускать Python через process runner;
+- передавать helper’у входной JSON;
+- читать созданный `transcript.json`;
+- обрабатывать exit code;
+- сохранять диагностические details.
 
-### Разрешено
+Запрещено:
 
-- запуск Python как внешнего процесса;
-- передача входного JSON;
-- чтение `transcript.json`;
-- анализ exit code;
-- логирование stderr/stdout для диагностики.
-
-### Запрещено
-
-- внутренний REST;
-- gRPC;
-- очереди;
-- webhooks;
+- внутренний REST между C# и Python;
+- gRPC между C# и Python;
+- очереди между C# и Python;
+- Python HTTP service;
 - запись в Qdrant из Python;
 - chunking в Python;
-- ответ пользователю из Python.
+- генерация ответа в Python.
 
-### Практическое правило
+## Слои и зависимости
 
-Если для интеграции C# и Python требуется сетевое взаимодействие, значит реализация ушла от MVP-архитектуры.
-
----
-
-## 8. Где выполняется логика
-
-| Зона | Где находится |
-|---|---|
-| Нормализация источника | C# (`IVideoSource`) |
-| Запуск транскрибации | C# вызывает Python (`ITranscriptionRunner`) |
-| Транскрибация | Python helper |
-| Чтение transcript JSON | C# (`ITranscriptReader`) |
-| Chunking | C# (`IChunker`) |
-| Построение embeddings | C# (`IEmbeddingProvider`) |
-| Запись в Qdrant | C# (`IVectorStore`) |
-| Retrieval | C# (`IContextRetriever`) |
-| Генерация ответа | C# (`IAnswerGenerator`) |
-
----
-
-## 9. Правила зависимостей
-
-### Слои внутри C# приложения
+В C# приложении используются следующие логические зоны:
 
 ```text
 Domain
-  - предметные сущности и инварианты
-
-Application/Abstractions
-  - интерфейсы
-
-Application/Contracts
-  - DTO и прикладные контракты
-
-Application/Services
-  - orchestration сценариев
-
+Application
 Infrastructure
-  - реализации интерфейсов и адаптеры
+Pages / API / CLI composition
 ```
 
-### Разрешённые зависимости
+### Domain
 
-- `Application -> Domain`
-- `Infrastructure -> Application`
-- `Infrastructure -> Domain`
+Содержит предметные сущности и их инварианты.
+
+Не зависит от Application и Infrastructure.
+
+### Application
+
+Содержит:
+
+- interfaces в `Application/Abstractions`;
+- сценарные contracts в `Application/Contracts`;
+- orchestration services в `Application/Services`.
+
+Application знает только о Domain и abstractions.
+
+### Infrastructure
+
+Содержит реализации interfaces:
+
+- video source adapters;
+- transcription runner;
+- transcript reader;
+- embedding providers;
+- vector store;
+- answer generators;
+- technical initialization.
+
+Infrastructure может зависеть от Application и Domain.
+
+### Pages / API / CLI
+
+Это входной слой приложения.
+
+Он должен:
+
+- принимать пользовательский ввод;
+- вызывать application services;
+- возвращать результат.
+
+Он не должен напрямую работать с Qdrant, Ollama, Python helper или SDK моделей.
+
+## Разрешённые зависимости
+
+```text
+Application -> Domain
+Infrastructure -> Application
+Infrastructure -> Domain
+Pages/API/CLI -> Application
+Composition root -> Infrastructure
+```
+
+## Запрещённые зависимости
+
+```text
+Domain -> Application
+Domain -> Infrastructure
+Application -> Infrastructure concrete classes
+Pages/API/CLI -> Qdrant directly
+Pages/API/CLI -> Ollama/OpenAI directly
+Pages/API/CLI -> Python helper directly
+Python helper -> Qdrant
+Python helper -> retrieval/answer generation
+```
+
+## Архитектурные нарушения
+
+Нарушением считается:
+
+- перенос orchestration из C# в Python;
+- превращение Python helper в HTTP-сервис;
+- добавление внутреннего REST/gRPC между C# и Python;
+- выполнение chunking в Python;
+- запись embeddings в Qdrant из Python;
+- прямой вызов Qdrant/Ollama/OpenAI из Razor UI или API endpoint;
+- размещение concrete infrastructure implementations в Application;
+- размещение application interfaces в Domain;
+- использование Qdrant как общей базы приложения;
+- автоматический rebuild без явного решения;
+- смешивание embeddings разных моделей в одной collection;
+- превращение Razor UI в основной продуктовый frontend вместо dev/demo-интерфейса.
