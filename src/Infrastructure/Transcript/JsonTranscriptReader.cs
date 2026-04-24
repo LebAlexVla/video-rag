@@ -8,7 +8,7 @@ namespace VideoLectureRagAssistant.Infrastructure.Transcript;
 
 public sealed class JsonTranscriptReader : ITranscriptReader
 {
-    public async Task<Transcript> ReadAsync(
+    public async Task<VideoLectureRagAssistant.Domain.Entities.Transcript> ReadAsync(
         string transcriptPath,
         CancellationToken cancellationToken = default)
     {
@@ -49,7 +49,7 @@ public sealed class JsonTranscriptReader : ITranscriptReader
             language: language,
             durationSec: durationSec);
 
-        var transcript = new Transcript(
+        var transcript = new VideoLectureRagAssistant.Domain.Entities.Transcript(
             jobId: jobId,
             lecture: lecture,
             transcriberProvider: GetRequiredString(transcriberElement, "provider"),

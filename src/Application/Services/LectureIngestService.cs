@@ -39,8 +39,8 @@ public sealed class LectureIngestService : ILectureIngestService
         if (string.IsNullOrWhiteSpace(registryPath))
             throw new ArgumentException("Registry path is required.", nameof(registryPath));
 
-        _transcriptsRootPath = transcriptsRootPath;
-        _registryPath = registryPath;
+        _transcriptsRootPath = Path.GetFullPath(transcriptsRootPath);
+        _registryPath = Path.GetFullPath(registryPath);
     }
 
     public async Task<LectureIngestResult> IngestAsync(
@@ -225,12 +225,13 @@ public sealed class LectureIngestService : ILectureIngestService
 
     private string BuildTranscriptPath(string fileName)
     {
-        Directory.CreateDirectory(_transcriptsRootPath);
+        var transcriptsRootFullPath = Path.GetFullPath(_transcriptsRootPath);
+        Directory.CreateDirectory(transcriptsRootFullPath);
 
         var baseName = Path.GetFileNameWithoutExtension(fileName);
         var safeName = MakeSafeFileName(baseName);
 
-        return Path.Combine(_transcriptsRootPath, $"{safeName}.transcript.json");
+        return Path.Combine(transcriptsRootFullPath, $"{safeName}.transcript.json");
     }
 
     private static string MakeSafeFileName(string value)
@@ -265,11 +266,7 @@ public sealed class LectureIngestService : ILectureIngestService
         }
 
         await using var stream = File.Create(_registryPath);
-        await JsonSerializer.SerializeAsync(
-            stream,
-            entries,
-            SerializerContext.Default.ListRegistryLectureEntry,
-            cancellationToken);
+        await JsonSerializer.SerializeAsync(stream, entries, cancellationToken: cancellationToken);
     }
 
     private async Task<List<RegistryLectureEntry>> ReadRegistryAsync(CancellationToken cancellationToken)
@@ -279,10 +276,9 @@ public sealed class LectureIngestService : ILectureIngestService
 
         await using var stream = File.OpenRead(_registryPath);
 
-        var entries = await JsonSerializer.DeserializeAsync(
+        var entries = await JsonSerializer.DeserializeAsync<List<RegistryLectureEntry>>(
             stream,
-            SerializerContext.Default.ListRegistryLectureEntry,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         return entries ?? new List<RegistryLectureEntry>();
     }
@@ -293,9 +289,4 @@ public sealed class LectureIngestService : ILectureIngestService
         string TranscriptPath,
         string? SourcePath,
         string? SourceFileName);
-
-    [JsonSerializable(typeof(List<RegistryLectureEntry>))]
-    private sealed partial class SerializerContext : JsonSerializerContext
-    {
-    }
 }

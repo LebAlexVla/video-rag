@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using VideoLectureRagAssistant.Application.Abstractions;
@@ -27,24 +28,38 @@ public sealed class OllamaEmbeddingProvider : IEmbeddingProvider
         string text,
         CancellationToken cancellationToken = default)
     {
-        var embeddings = await EmbedInternalAsync(new[] { NormalizeText(text) }, cancellationToken);
-        return embeddings[0];
+        var normalized = NormalizeText(text);
+
+        var batch = await EmbedBatchAsync(new[] { normalized }, cancellationToken);
+        return batch[0];
     }
 
-    public Task<IReadOnlyList<float[]>> EmbedBatchAsync(
+    public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(texts);
 
         if (texts.Count == 0)
-            return Task.FromResult<IReadOnlyList<float[]>>(Array.Empty<float[]>());
+            return Array.Empty<float[]>();
 
         var normalized = texts.Select(NormalizeText).ToArray();
-        return EmbedInternalAsync(normalized, cancellationToken);
+
+        var result = await TryEmbedWithNewApiAsync(normalized, cancellationToken);
+
+        if (result is not null)
+            return result;
+
+        result = await TryEmbedWithLegacyApiAsync(normalized, cancellationToken);
+
+        if (result is not null)
+            return result;
+
+        throw new InvalidOperationException(
+            "Ollama embeddings request failed: neither /api/embed nor /api/embeddings is available.");
     }
 
-    private async Task<IReadOnlyList<float[]>> EmbedInternalAsync(
+    private async Task<IReadOnlyList<float[]>?> TryEmbedWithNewApiAsync(
         IReadOnlyList<string> input,
         CancellationToken cancellationToken)
     {
@@ -56,6 +71,9 @@ public sealed class OllamaEmbeddingProvider : IEmbeddingProvider
                 input
             },
             cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
 
         response.EnsureSuccessStatusCode();
 
@@ -75,6 +93,43 @@ public sealed class OllamaEmbeddingProvider : IEmbeddingProvider
 
         if (result.Length != input.Count)
             throw new InvalidOperationException("Ollama returned unexpected embeddings count.");
+
+        return result;
+    }
+
+    private async Task<IReadOnlyList<float[]>?> TryEmbedWithLegacyApiAsync(
+        IReadOnlyList<string> input,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<float[]>(input.Count);
+
+        foreach (var text in input)
+        {
+            using var response = await _httpClient.PostAsJsonAsync(
+                "/api/embeddings",
+                new
+                {
+                    model = _modelName,
+                    prompt = text
+                },
+                cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (!document.RootElement.TryGetProperty("embedding", out var embeddingElement) ||
+                embeddingElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidOperationException("Ollama legacy response does not contain embedding array.");
+            }
+
+            result.Add(ReadFloatArray(embeddingElement));
+        }
 
         return result;
     }

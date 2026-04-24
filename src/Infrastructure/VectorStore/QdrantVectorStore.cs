@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using VideoLectureRagAssistant.Application.Abstractions;
 using VideoLectureRagAssistant.Application.Contracts;
@@ -34,7 +36,7 @@ public sealed class QdrantVectorStore : IVectorStore
         {
             points = chunks.Select(chunk => new
             {
-                id = chunk.ChunkId,
+                id = CreatePointId(chunk.ChunkId),
                 vector = chunk.Vector,
                 payload = new Dictionary<string, object?>
                 {
@@ -55,7 +57,7 @@ public sealed class QdrantVectorStore : IVectorStore
             requestBody,
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessWithBodyAsync(response, cancellationToken);
     }
 
     public async Task<IReadOnlyList<RetrievedContext>> SearchAsync(
@@ -81,7 +83,7 @@ public sealed class QdrantVectorStore : IVectorStore
             },
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessWithBodyAsync(response, cancellationToken);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
@@ -111,7 +113,7 @@ public sealed class QdrantVectorStore : IVectorStore
             },
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessWithBodyAsync(response, cancellationToken);
     }
 
     private static RetrievedContext MapRetrievedContext(JsonElement item)
@@ -166,5 +168,28 @@ public sealed class QdrantVectorStore : IVectorStore
             throw new InvalidOperationException($"Qdrant payload property '{propertyName}' has invalid value.");
 
         return value;
+    }
+
+    private static async Task EnsureSuccessWithBodyAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        throw new HttpRequestException(
+            $"Qdrant request failed with status {(int)response.StatusCode} ({response.StatusCode}). Body: {body}");
+    }
+
+    private static string CreatePointId(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            throw new ArgumentException("Source id is required.", nameof(source));
+
+        var hash = MD5.HashData(Encoding.UTF8.GetBytes(source.Trim()));
+
+        return new Guid(hash).ToString();
     }
 }

@@ -57,18 +57,18 @@ public sealed class PythonTranscriptionRunner : ITranscriptionRunner
         await WriteInputJsonAsync(request, inputJsonPath, cancellationToken);
 
         using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = _pythonExecutable,
-                Arguments = $"\"{inputJsonPath}\" \"{outputJsonPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = Path.GetDirectoryName(_helperScriptPath) ?? Environment.CurrentDirectory
-            }
-        };
+		{
+    		StartInfo = new ProcessStartInfo
+    		{
+        		FileName = _pythonExecutable,
+        		Arguments = $"\"{_helperScriptPath}\" \"{inputJsonPath}\" \"{outputJsonPath}\"",
+        		RedirectStandardOutput = true,
+        		RedirectStandardError = true,
+        		UseShellExecute = false,
+        		CreateNoWindow = true,
+        		WorkingDirectory = Path.GetDirectoryName(_helperScriptPath) ?? Environment.CurrentDirectory
+    		}
+		};
 
         process.Start();
 
