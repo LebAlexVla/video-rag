@@ -402,7 +402,7 @@ def create_whisper_model(model_name: str) -> WhisperModel:
             model_size_or_path=model_name,
             device="cpu",
             compute_type="int8",
-            cpu_threads=2,
+            cpu_threads=1,
         )
     except TypeError:
         return WhisperModel(
