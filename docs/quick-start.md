@@ -8,10 +8,10 @@
 
 Нужно установить:
 
-- .NET 9 SDK
+- .NET 8 SDK
 - Docker
 - Python 3.10+
-- Ollama (только для embeddings)
+- Ollama — только если нет API-ключей (см. шаг 4)
 
 Проверить .NET:
 
@@ -31,12 +31,6 @@ docker compose version
 
 ```bash
 python --version
-```
-
-Проверить Ollama:
-
-```bash
-ollama --version
 ```
 
 ## 2. Установить Python dependencies
@@ -77,35 +71,27 @@ http://localhost:6333/dashboard
 
 Коллекция Qdrant создаётся приложением автоматически при запуске, если её ещё нет.
 
-## 4. Подготовить Ollama models (только для embeddings)
+## 4. Настроить провайдеры
 
-Генерация ответа выполняется через DeepSeek API (см. шаг 4a). Ollama нужен только для построения embeddings.
+По умолчанию система использует облачные API: [DeepSeek](https://platform.deepseek.com/) для генерации ответов и [Google Gemini](https://aistudio.google.com/apikey) для embeddings.
 
-> **Начиная с ADR-014 embeddings переведены на Google Gemini API. Ollama больше не требуется для работы системы.** Раздел оставлен для справки на случай возврата к локальному провайдеру.
+Если есть оба токена — создай файл `.env` в корне проекта:
 
-Если нужен локальный fallback — установить Ollama и модель:
-
-```bash
-ollama pull embeddinggemma
 ```
-
-Затем переключить в `appsettings.json`: `"Embeddings.Provider": "ollama"`.
-
-## 4a. Настроить API keys
-
-Генерация ответа выполняется через [DeepSeek API](https://platform.deepseek.com/).
-Embeddings выполняются через [Google Gemini API](https://aistudio.google.com/apikey).
-
-Создай файл `.env` в корне проекта:
-
-```bash
 DEEPSEEK_API_TOKEN=sk-xxxxxxxxxxxxxxxx
 GOOGLE_API_TOKEN=AIzaSyxxxxxxxxxxxxxxxx
 ```
 
-Файл `.env` уже добавлен в `.gitignore` и не попадёт в репозиторий.
+Файл `.env` уже добавлен в `.gitignore` и не попадёт в репозиторий. При старте приложение читает `.env` автоматически.
 
-При старте приложение автоматически читает `.env` и передаёт токены в конфигурацию. Дополнительных действий не требуется.
+**Нет токенов? Используй Ollama локально.**
+
+Установи [Ollama](https://ollama.com), скачай нужные модели и переключи провайдеры в `appsettings.json`:
+
+```json
+"Embeddings": { "Provider": "ollama" },
+"Answers": { "Provider": "ollama" }
+```
 
 ## 5. Проверить конфигурацию
 
@@ -124,8 +110,7 @@ Chunking
 
 Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
 
-По умолчанию `Answers.Provider` установлен в `deepseek`. API-ключ передаётся через `.env`, а не через `appsettings.json`.
-```
+По умолчанию `Answers.Provider = "deepseek"` и `Embeddings.Provider = "gemini"`. API-ключи передаются через `.env`, а не через `appsettings.json`.
 
 Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
 
