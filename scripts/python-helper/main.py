@@ -209,7 +209,7 @@ def transcribe_single_pass(
     language: str | None,
 ) -> dict[str, Any]:
     duration_sec = probe_media_duration(source_path)
-    model = get_thread_local_model(model_name)
+    model = create_whisper_model(model_name, cpu_threads=4)
 
     print("Before transcribe")
     segments_iter, info = model.transcribe(
@@ -396,13 +396,13 @@ def get_thread_local_model(model_name: str) -> WhisperModel:
     return cached
 
 
-def create_whisper_model(model_name: str) -> WhisperModel:
+def create_whisper_model(model_name: str, cpu_threads=1) -> WhisperModel:
     try:
         return WhisperModel(
             model_size_or_path=model_name,
             device="cpu",
             compute_type="int8",
-            cpu_threads=1,
+            cpu_threads=cpu_threads,
         )
     except TypeError:
         return WhisperModel(
