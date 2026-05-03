@@ -8,10 +8,10 @@
 
 Нужно установить:
 
-- .NET 8 SDK
+- .NET 9 SDK
 - Docker
 - Python 3.10+
-- Ollama
+- Ollama (только для embeddings)
 
 Проверить .NET:
 
@@ -77,33 +77,35 @@ http://localhost:6333/dashboard
 
 Коллекция Qdrant создаётся приложением автоматически при запуске, если её ещё нет.
 
-## 4. Подготовить Ollama models
+## 4. Подготовить Ollama models (только для embeddings)
 
-Проверить, что Ollama API отвечает:
+Генерация ответа выполняется через DeepSeek API (см. шаг 4a). Ollama нужен только для построения embeddings.
 
-```powershell
-Invoke-WebRequest http://localhost:11434/api/version
-```
+> **Начиная с ADR-014 embeddings переведены на Google Gemini API. Ollama больше не требуется для работы системы.** Раздел оставлен для справки на случай возврата к локальному провайдеру.
 
-Проверить установленные модели:
-
-```bash
-ollama list
-```
-
-Подтянуть модель для embeddings:
+Если нужен локальный fallback — установить Ollama и модель:
 
 ```bash
 ollama pull embeddinggemma
 ```
 
-Подтянуть модель для генерации ответа:
+Затем переключить в `appsettings.json`: `"Embeddings.Provider": "ollama"`.
+
+## 4a. Настроить API keys
+
+Генерация ответа выполняется через [DeepSeek API](https://platform.deepseek.com/).
+Embeddings выполняются через [Google Gemini API](https://aistudio.google.com/apikey).
+
+Создай файл `.env` в корне проекта:
 
 ```bash
-ollama pull llama3.1
+DEEPSEEK_API_TOKEN=sk-xxxxxxxxxxxxxxxx
+GOOGLE_API_TOKEN=AIzaSyxxxxxxxxxxxxxxxx
 ```
 
-Названия моделей должны совпадать с настройками в `appsettings.json`.
+Файл `.env` уже добавлен в `.gitignore` и не попадёт в репозиторий.
+
+При старте приложение автоматически читает `.env` и передаёт токены в конфигурацию. Дополнительных действий не требуется.
 
 ## 5. Проверить конфигурацию
 
@@ -118,6 +120,11 @@ Answers
 PythonHelper
 Paths
 Chunking
+```
+
+Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
+
+По умолчанию `Answers.Provider` установлен в `deepseek`. API-ключ передаётся через `.env`, а не через `appsettings.json`.
 ```
 
 Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
