@@ -1,9 +1,35 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>VideoLectureRagAssistant</RootNamespace>
-    <AssemblyName>VideoLectureRagAssistant</AssemblyName>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>VideoLectureRagAssistant</RootNamespace>
+        <AssemblyName>VideoLectureRagAssistant</AssemblyName>
+        <DefaultItemExcludes>$(DefaultItemExcludes);shared\**;clients\**</DefaultItemExcludes>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <ProjectReference Include="shared\VideoRag.Contracts\VideoRag.Contracts.csproj" />
+    </ItemGroup>
+    
+    <ItemGroup>
+      <Compile Include="clients\VideoRag.TelegramBot\TelegramBotHostedService.cs" />
+      <Compile Include="clients\VideoRag.TelegramBot\TelegramOptions.cs" />
+      <Compile Include="clients\VideoRag.TelegramBot\VideoRagApiClient.cs" />
+      <Compile Include="clients\VideoRag.TelegramBot\VideoRagApiOptions.cs" />
+    </ItemGroup>
+    
+    <ItemGroup>
+        <Compile Remove="clients\**\*.cs" />
+        <Compile Remove="shared\**\*.cs" />
+
+        <Content Remove="clients\**\*" />
+        <Content Remove="shared\**\*" />
+
+        <None Remove="clients\**\*" />
+        <None Remove="shared\**\*" />
+
+        <EmbeddedResource Remove="clients\**\*" />
+        <EmbeddedResource Remove="shared\**\*" />
+    </ItemGroup>
 </Project>
