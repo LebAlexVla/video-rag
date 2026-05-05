@@ -1,0 +1,194 @@
+﻿@page
+@model VideoRag.WebUi.Pages.IndexModel
+
+@{
+    ViewData["Title"] = "Video Lecture RAG Assistant";
+}
+
+<div class="shell">
+    <header class="topbar">
+        <div class="brand-block">
+            <div class="brand-badge">AI • RAG • Lectures</div>
+            <h1>Video Lecture RAG Assistant</h1>
+            <p class="subtitle">
+                Задавай вопросы по загруженным видео-лекциям и получай ответ с источниками.
+            </p>
+        </div>
+
+        <div class="topbar-actions">
+            @if (Model.IsApiHealthy == true)
+            {
+                <div class="status-pill status-pill-ok">
+                    <span class="status-dot"></span>
+                    API доступен
+                </div>
+            }
+            else if (Model.IsApiHealthy == false)
+            {
+                <div class="status-pill status-pill-bad">
+                    <span class="status-dot"></span>
+                    API недоступен
+                </div>
+            }
+            else
+            {
+                <div class="status-pill">
+                    <span class="status-dot"></span>
+                    Проверка API...
+                </div>
+            }
+        </div>
+    </header>
+
+    <main class="main-grid">
+        <section class="panel glass-panel">
+            <div class="panel-header">
+                <h2>Новый запрос</h2>
+                <p>Укажи вопрос и параметры поиска контекста.</p>
+            </div>
+
+            <form method="post" id="ask-form" class="ask-form">
+                <div class="field">
+                    <label asp-for="Question">Вопрос</label>
+                    <textarea
+                        asp-for="Question"
+                        id="question-box"
+                        rows="7"
+                        placeholder="Например: какие архитектурные решения приняты в проекте и почему?"></textarea>
+                </div>
+
+                <div class="params-grid">
+                    <div class="field">
+                        <label asp-for="TopK">TopK</label>
+                        <input asp-for="TopK" type="number" min="1" max="20" />
+                        <div class="hint">Сколько чанков взять из базы.</div>
+                    </div>
+
+                    <div class="field">
+                        <label asp-for="MinScore">MinScore</label>
+                        <input asp-for="MinScore" type="number" min="0" max="1" step="0.05" />
+                        <div class="hint">Минимальный порог релевантности.</div>
+                    </div>
+                </div>
+
+                <div class="submit-row">
+                    <button type="submit" id="submit-button" class="primary-btn">
+                        <span class="btn-text">Спросить</span>
+                        <span class="btn-loader hidden"></span>
+                    </button>
+                </div>
+            </form>
+
+            <div class="tips-card">
+                <div class="tips-title">Подсказки</div>
+                <ul>
+                    <li>Задавай конкретные вопросы.</li>
+                    <li>Если ответ слабый — попробуй увеличить TopK.</li>
+                    <li>Если слишком много шума — увеличь MinScore.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="panel glass-panel result-panel">
+            <div class="panel-header">
+                <h2>Ответ</h2>
+                <p>Результат запроса и найденные источники.</p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+            {
+                <div class="message-box message-error">
+                    <div class="message-title">Ошибка</div>
+                    <div>@Model.ErrorMessage</div>
+                </div>
+            }
+
+            @if (Model.Response is not null)
+            {
+                @if (!Model.Response.HasEnoughContext)
+                {
+                    <div class="message-box message-warning">
+                        <div class="message-title">Недостаточно контекста</div>
+                        <div>
+                            Контекста недостаточно для уверенного ответа.
+                            Проверь, что видео было загружено через ingest, или уточни вопрос.
+                        </div>
+                    </div>
+                }
+
+                <div class="answer-card">
+                    <div class="answer-card-header">
+                        <span class="answer-label">Generated answer</span>
+                    </div>
+                    <div class="answer-text">@Model.Response.Answer</div>
+                </div>
+
+                @if (Model.Response.Sources.Count > 0)
+                {
+                    <div class="sources-section">
+                        <div class="sources-title-row">
+                            <h3>Источники</h3>
+                            <span class="sources-count">@Model.Response.Sources.Count</span>
+                        </div>
+
+                        <div class="sources-grid">
+                            @foreach (var source in Model.Response.Sources)
+                            {
+                                <div class="source-card">
+                                    <div class="source-card-top">
+                                        <div class="source-lecture">@source.LectureTitle</div>
+                                        <div class="source-chip">Чанк #@source.ChunkIndex</div>
+                                    </div>
+
+                                    <div class="source-meta">
+                                        <div class="meta-row">
+                                            <span class="meta-label">Примерная минута</span>
+                                            <span class="meta-value">@source.ApproxMinute</span>
+                                        </div>
+
+                                        @if (source.ApproxStartSec is not null || source.ApproxEndSec is not null)
+                                        {
+                                            <div class="meta-row">
+                                                <span class="meta-label">Диапазон</span>
+                                                <span class="meta-value">
+                                                    @FormatTime(source.ApproxStartSec) – @FormatTime(source.ApproxEndSec)
+                                                </span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state small-empty-state">
+                        Источники не вернулись.
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">✦</div>
+                    <div class="empty-title">Пока нет ответа</div>
+                    <div class="empty-text">
+                        Введи вопрос слева и отправь запрос — ответ появится здесь.
+                    </div>
+                </div>
+            }
+        </section>
+    </main>
+</div>
+
+@functions {
+    private static string FormatTime(double? seconds)
+    {
+        if (seconds is null)
+            return "?";
+
+        var time = TimeSpan.FromSeconds(seconds.Value);
+        return $"{(int)time.TotalMinutes:00}:{time.Seconds:00}";
+    }
+}

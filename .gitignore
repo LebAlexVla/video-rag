@@ -11,6 +11,3 @@ data/registry/*
 !data/transcripts/.gitkeep
 !data/jobs/.gitkeep
 scripts/python-helper/data/*
-lectures.json
-**/lectures.json
-**/wwwroot/lib/
