@@ -169,9 +169,12 @@ public sealed class TelegramBotHostedService : BackgroundService
 
     private static string FormatAnswer(AskResponseDto response)
     {
-        var answer = string.IsNullOrWhiteSpace(response.Answer)
-            ? "Не нашёл достаточно контекста для ответа."
-            : response.Answer;
+        var answer = response.UsedContext
+            ? response.Answer
+            : response.Message;
+
+        if (string.IsNullOrWhiteSpace(answer))
+            answer = "Не нашёл достаточно контекста для ответа.";
 
         if (response.Sources.Count == 0)
             return TrimForTelegram(answer);
@@ -182,11 +185,11 @@ public sealed class TelegramBotHostedService : BackgroundService
                 $"- {source.LectureTitle}, чанк #{source.ChunkIndex}, {source.Position}"));
 
         return TrimForTelegram($"""
-        {answer}
+                                {answer}
 
-        Источники:
-        {sources}
-        """);
+                                Источники:
+                                {sources}
+                                """);
     }
 
     private static string TrimForTelegram(string text)

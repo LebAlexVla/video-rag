@@ -60,7 +60,7 @@
                 <div class="params-grid">
                     <div class="field">
                         <label asp-for="TopK">TopK</label>
-                        <input asp-for="TopK" type="number" min="1" max="20" />
+                        <input asp-for="TopK" type="number" min="1" max="10" />
                         <div class="hint">Сколько чанков взять из базы.</div>
                     </div>
 
@@ -103,15 +103,14 @@
                 </div>
             }
 
-            @if (Model.Response is not null)
+            @if (Model.AskResponse is not null)
             {
-                @if (!Model.Response.HasEnoughContext)
+                @if (!Model.AskResponse.UsedContext)
                 {
                     <div class="message-box message-warning">
                         <div class="message-title">Недостаточно контекста</div>
                         <div>
-                            Контекста недостаточно для уверенного ответа.
-                            Проверь, что видео было загружено через ingest, или уточни вопрос.
+                            @(Model.AskResponse.Message ?? "Контекста недостаточно для уверенного ответа.")
                         </div>
                     </div>
                 }
@@ -120,19 +119,21 @@
                     <div class="answer-card-header">
                         <span class="answer-label">Generated answer</span>
                     </div>
-                    <div class="answer-text">@Model.Response.Answer</div>
+                    <div class="answer-text">
+                        @(Model.AskResponse.Answer ?? Model.AskResponse.Message ?? "Ответ не был сформирован.")
+                    </div>
                 </div>
 
-                @if (Model.Response.Sources.Count > 0)
+                @if (Model.AskResponse.Sources.Count > 0)
                 {
                     <div class="sources-section">
                         <div class="sources-title-row">
                             <h3>Источники</h3>
-                            <span class="sources-count">@Model.Response.Sources.Count</span>
+                            <span class="sources-count">@Model.AskResponse.Sources.Count</span>
                         </div>
 
                         <div class="sources-grid">
-                            @foreach (var source in Model.Response.Sources)
+                            @foreach (var source in Model.AskResponse.Sources)
                             {
                                 <div class="source-card">
                                     <div class="source-card-top">

@@ -1,7 +1,8 @@
 ﻿namespace VideoRag.Contracts;
 
 public sealed record AskResponseDto(
-    string Answer,
-    IReadOnlyList<SourceDto> Sources,
-    bool HasEnoughContext
+    string? Answer,
+    bool UsedContext,
+    string? Message,
+    IReadOnlyList<SourceDto> Sources
 );

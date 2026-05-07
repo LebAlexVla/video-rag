@@ -4,21 +4,17 @@ using VideoRag.Contracts;
 
 namespace VideoLectureRagAssistant.Presentation.Http;
 
-internal static class AskHttpMapper
+public static class AskHttpMapper
 {
     public static AskResponseDto ToDto(AskResponse response)
     {
-        var answer = response.Answer
-                     ?? response.Message
-                     ?? "Не нашёл достаточно контекста для ответа.";
+        ArgumentNullException.ThrowIfNull(response);
 
         return new AskResponseDto(
-            Answer: answer,
-            Sources: response.Sources
-                .Select(ToDto)
-                .ToList(),
-            HasEnoughContext: response.UsedContext
-        );
+            Answer: response.Answer,
+            UsedContext: response.UsedContext,
+            Message: response.Message,
+            Sources: response.Sources.Select(ToDto).ToArray());
     }
 
     private static SourceDto ToDto(SourceCitation source)
@@ -27,36 +23,25 @@ internal static class AskHttpMapper
             LectureTitle: source.LectureTitle,
             ChunkIndex: source.ChunkIndex,
             ApproxMinute: source.ApproxMinute,
-            Position: FormatSourcePosition(source),
+            Position: FormatPosition(source),
             ApproxStartSec: source.ApproxStartSec,
-            ApproxEndSec: source.ApproxEndSec
-        );
+            ApproxEndSec: source.ApproxEndSec);
     }
 
-    private static string FormatSourcePosition(SourceCitation source)
+    private static string FormatPosition(SourceCitation source)
     {
-        if (source.ApproxStartSec.HasValue && source.ApproxEndSec.HasValue)
-        {
-            return $"примерно {FormatSeconds(source.ApproxStartSec.Value)}–{FormatSeconds(source.ApproxEndSec.Value)}";
-        }
+        if (source.ApproxStartSec is not null || source.ApproxEndSec is not null)
+            return $"{FormatTime(source.ApproxStartSec)}–{FormatTime(source.ApproxEndSec)}";
 
-        if (source.ApproxStartSec.HasValue)
-        {
-            return $"примерно {FormatSeconds(source.ApproxStartSec.Value)}";
-        }
-
-        return $"примерно {source.ApproxMinute} мин.";
+        return $"~{source.ApproxMinute} мин.";
     }
 
-    private static string FormatSeconds(double seconds)
+    private static string FormatTime(double? seconds)
     {
-        var time = TimeSpan.FromSeconds(seconds);
+        if (seconds is null)
+            return "?";
 
-        if (time.TotalHours >= 1)
-        {
-            return $"{(int)time.TotalHours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
-        }
-
-        return $"{time.Minutes:D2}:{time.Seconds:D2}";
+        var time = TimeSpan.FromSeconds(seconds.Value);
+        return $"{(int)time.TotalMinutes:00}:{time.Seconds:00}";
     }
 }
