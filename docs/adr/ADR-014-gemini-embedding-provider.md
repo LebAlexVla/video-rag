@@ -1,74 +1,53 @@
-# ADR-014 — Google Gemini используется как облачный провайдер embeddings
+# ADR-014 — Google Gemini используется как cloud/API provider для embeddings
 
-- **ID:** ADR-014
 - **Статус:** Принято
 
 ## Контекст
 
-После перехода на DeepSeek для answer generation (ADR-013) embeddings оставались на локальном Ollama. Это противоречило задаче полного перехода с локальных моделей на облачные API.
+После перехода answer generation на cloud/API режим embeddings тоже переводятся на внешний provider, чтобы снизить локальную нагрузку и улучшить качество retrieval.
 
-DeepSeek не предоставляет endpoint для embeddings — только chat completions. Потребовался отдельный облачный embedding-провайдер.
+DeepSeek не предоставляет embedding-модель, поэтому нужен отдельный embedding provider.
 
 ## Решение
 
-Google Gemini API используется как провайдер для построения embeddings (`IEmbeddingProvider`).
+Использовать Google Gemini как основной provider для `IEmbeddingProvider`.
 
-Модель: `gemini-embedding-001`.
+Модель по умолчанию: `gemini-embedding-001`.
 
-Ключевые характеристики:
-- поддерживает task types: `RETRIEVAL_QUERY` (для вопросов) и `RETRIEVAL_DOCUMENT` (для документов);
-- размерность выходного вектора: 768, совпадает с `Qdrant.VectorSize`;
-- поддерживает batch endpoint (`batchEmbedContents`).
+Настроенная размерность: `768`, чтобы соответствовать `Qdrant.VectorSize`.
 
-Реализован новый `GeminiEmbeddingProvider` в `src/Infrastructure/Embeddings/`. Использует REST API Google Generative Language API (`/v1beta/models/{model}:embedContent` и `batchEmbedContents`). Аутентификация — через API key в query string (`?key=...`), что является стандартным для Google API.
+Для RAG используются task types:
+- пользовательский вопрос: `RETRIEVAL_QUERY`;
+- chunks лекций: `RETRIEVAL_DOCUMENT`.
 
-Конфигурация в `appsettings.json`:
-
-```json
-"Embeddings": {
-  "Provider": "gemini",
-  "Gemini": {
-    "BaseUrl": "https://generativelanguage.googleapis.com",
-    "ApiKey": "",
-    "Model": "gemini-embedding-001",
-    "OutputDimensionality": 768
-  }
-}
-```
-
-API-ключ не хранится в `appsettings.json`. Передаётся через переменную окружения `GOOGLE_API_TOKEN` в файле `.env` (gitignored). При старте приложение читает `.env` и маппит токен в конфигурацию.
-
-## Task types
-
-`GeminiEmbeddingProvider` использует task types для улучшения качества RAG:
-
-- `EmbedAsync` (вопрос пользователя) → `RETRIEVAL_QUERY`;
-- `EmbedBatchAsync` (chunks лекций при ingest) → `RETRIEVAL_DOCUMENT`.
-
-Это обязательное условие для корректного поиска: вопрос и документы должны встраиваться в совместимые embedding-пространства.
+Ollama embedding provider не удаляется и остаётся локальным fallback-режимом.
 
 ## Последствия
 
-- Embeddings полностью переведены с локального Ollama на облачный Google Gemini API.
-- Ollama больше не требуется для работы системы.
-- Размерность 768 совпадает с существующей Qdrant collection — rebuild не требуется при первом запуске.
-- При смене модели или провайдера embeddings требуется rebuild (ADR-011).
+Плюсы:
+- embeddings строятся без нагрузки на локальную машину;
+- можно использовать специализированные retrieval task types;
+- provider остаётся за интерфейсом `IEmbeddingProvider`.
 
-## Что это значит для реализации
+Минусы:
+- нужен Gemini API key;
+- нужен интернет;
+- возможны rate limits;
+- при смене embedding provider нужен rebuild индекса.
 
-Разрешено:
-- использовать `gemini` как значение `Embeddings.Provider`;
-- хранить API-ключ только в `.env` (не в `appsettings.json`).
+## Важно про rebuild
+
+Совпадение размерности вектора не означает совместимость embedding space.
+
+Если Qdrant collection уже содержит vectors, построенные через другого provider, например Ollama, индекс нужно пересобрать.
+
+Нельзя смешивать embeddings от Gemini и Ollama в одной collection.
+
+## Ограничения
+
+Gemini используется только для embeddings.
 
 Запрещено:
-- коммитить `.env` в репозиторий;
 - вызывать Gemini API в обход `IEmbeddingProvider`;
-- смешивать embeddings от разных моделей в одной Qdrant collection.
-
-Откладывается:
-- переход на `gemini-embedding-2` (другое embedding-пространство, требует rebuild и обновлённого форматирования запросов).
-
-## Какие варианты были отвергнуты
-
-- OpenAI embeddings API (`text-embedding-3-small`) — уже реализован в проекте, но требует отдельного OpenAI-ключа.
-- Оставить Ollama для embeddings — противоречит задаче перехода на облачные модели.
+- смешивать embeddings от разных моделей в одной Qdrant collection;
+- менять embedding provider без rebuild индекса.
