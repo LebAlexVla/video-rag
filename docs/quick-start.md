@@ -73,25 +73,44 @@ http://localhost:6333/dashboard
 
 ## 4. Настроить провайдеры
 
-По умолчанию система использует облачные API: [DeepSeek](https://platform.deepseek.com/) для генерации ответов и [Google Gemini](https://aistudio.google.com/apikey) для embeddings.
+По умолчанию проект использует cloud/API режим:
 
-Если есть оба токена — создай файл `.env` в корне проекта:
+- DeepSeek для генерации ответов;
+- Google Gemini для embeddings.
 
+Для этого нужен файл `.env` в корне проекта:
+
+```env
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
-DEEPSEEK_API_TOKEN=sk-xxxxxxxxxxxxxxxx
-GOOGLE_API_TOKEN=AIzaSyxxxxxxxxxxxxxxxx
+
+Файл `.env` не коммитится в Git.
+
+### Локальный режим через Ollama
+
+Если нет API-ключей или нужен полностью локальный запуск, можно переключиться на Ollama.
+
+Проверить Ollama:
+
+```bash
+ollama --version
 ```
 
-Файл `.env` уже добавлен в `.gitignore` и не попадёт в репозиторий. При старте приложение читает `.env` автоматически.
+Скачать модели:
 
-**Нет токенов? Используй Ollama локально.**
-
-Установи [Ollama](https://ollama.com), скачай нужные модели и переключи провайдеры в `appsettings.json`:
-
-```json
-"Embeddings": { "Provider": "ollama" },
-"Answers": { "Provider": "ollama" }
+```bash
+ollama pull embeddinggemma
+ollama pull llama3.1
 ```
+
+Создать локальный override-конфиг:
+
+```powershell
+Copy-Item appsettings.Ollama.example.json appsettings.Local.json
+```
+
+`appsettings.Local.json` не коммитится. Он автоматически подхватывается приложением и переопределяет настройки из `appsettings.json`.
 
 ## 5. Проверить конфигурацию
 
@@ -113,6 +132,10 @@ Chunking
 По умолчанию `Answers.Provider = "deepseek"` и `Embeddings.Provider = "gemini"`. API-ключи передаются через `.env`, а не через `appsettings.json`.
 
 Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
+
+Важно: при смене embedding provider нужно пересобрать индекс.
+
+Например, если chunks были embedded через Gemini, а потом проект переключили на Ollama, старую Qdrant collection нужно пересоздать. Даже если `Qdrant.VectorSize` совпадает, embedding space у разных моделей разный.
 
 ## 6. Подготовить видео
 

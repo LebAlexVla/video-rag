@@ -12,3 +12,4 @@ data/registry/*
 !data/jobs/.gitkeep
 scripts/python-helper/data/*
 .env
+appsettings.Local.json

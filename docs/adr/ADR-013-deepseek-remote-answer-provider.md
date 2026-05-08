@@ -1,69 +1,39 @@
-# ADR-013 — DeepSeek используется как удалённый провайдер генерации ответа
+# ADR-013 — DeepSeek используется как cloud/API provider для генерации ответов
 
-- **ID:** ADR-013
 - **Статус:** Принято
 
 ## Контекст
 
-Ранее генерация ответа выполнялась через локальную модель Ollama.
-
-Локальный inference на ноутбуке или ПК уступает по качеству и скорости облачным LLM, запущенным на серверном GPU. Качество ответов критично для RAG-сценария: модель должна строго следовать контексту и избегать галлюцинаций.
-
-Было принято решение перейти на удалённый API-провайдер с подходящим соотношением цены и качества.
+Локальная генерация через Ollama удобна для автономного запуска, но качество и скорость ответа зависят от железа пользователя. Для демонстрации и основного сценария RAG требуется более стабильное качество генерации.
 
 ## Решение
 
-DeepSeek API используется как провайдер для генерации ответа (`IAnswerGenerator`).
+Использовать DeepSeek как основной cloud/API provider для `IAnswerGenerator`.
 
-DeepSeek API совместим с форматом OpenAI (`/v1/chat/completions`). Существующий `OpenAiAnswerGenerator` переиспользуется без изменений — DeepSeek настраивается через отдельный `HttpClient` с `BaseAddress = https://api.deepseek.com`.
+DeepSeek подключается через OpenAI-compatible API. В коде используется существующая реализация `OpenAiAnswerGenerator`, если endpoint совместим.
 
-Конфигурация в `appsettings.json`:
+Основная модель по умолчанию: `deepseek-v4-flash`.
 
-```json
-"Answers": {
-  "Provider": "deepseek",
-  "DeepSeek": {
-    "BaseUrl": "https://api.deepseek.com",
-    "ApiKey": "",
-    "Model": "deepseek-chat"
-  }
-}
-```
-
-API-ключ не хранится в `appsettings.json`. Он передаётся через переменную окружения `DEEPSEEK_API_TOKEN` в файле `.env` (gitignored). При старте приложение читает `.env` и маппит токен в конфигурацию.
-
-## Модели DeepSeek
-
-- `deepseek-chat` — алиас для `deepseek-v4-flash`, рекомендуется для answer generation;
-- `deepseek-reasoner` — алиас для `deepseek-v4-flash` в thinking-режиме (нецелесообразен для RAG).
-
-## Embeddings
-
-DeepSeek API не предоставляет модели для построения embeddings. Embedding provider настраивается независимо — см. ADR-014, где он заменён на Google Gemini.
+Ollama provider не удаляется и остаётся локальным fallback-режимом.
 
 ## Последствия
 
-- Качество ответов улучшается: облачная LLM обходит локальный inference.
-- Стоимость: тарифицируется по токенам (см. https://api-docs.deepseek.com/quick_start/pricing).
-- Зависимость от интернет-соединения при генерации ответа.
-- Embedding provider остаётся независимым от answer provider.
+Плюсы:
+- выше качество генерации по сравнению с локальной моделью на слабом железе;
+- меньше нагрузка на компьютер пользователя;
+- answer provider остаётся за интерфейсом `IAnswerGenerator`.
 
-## Что это значит для реализации
+Минусы:
+- нужен API key;
+- нужен интернет;
+- возможны rate limits и стоимость по токенам;
+- локальный fallback должен оставаться поддерживаемым.
 
-Разрешено:
-- использовать `deepseek` как значение `Answers.Provider`;
-- переиспользовать `OpenAiAnswerGenerator` с DeepSeek base URL;
-- хранить API-ключ только в `.env` (не в `appsettings.json`).
+## Ограничения
+
+DeepSeek используется только для генерации ответа.
 
 Запрещено:
-- коммитить `.env` в репозиторий;
-- вызывать DeepSeek API в обход `IAnswerGenerator`;
-- выполнять retrieval или embeddings в DeepSeek-слое.
-
-Откладывается:
-- оценка streaming-режима DeepSeek.
-
-## Какие варианты были отвергнуты
-
-- Оставить Ollama как основной answer provider (качество модели ограничено железом).
-- OpenAI API (DeepSeek предложил аналогичный API с более низкой ценой).
+- выполнять retrieval в DeepSeek-слое;
+- строить embeddings через answer provider;
+- обращаться к DeepSeek в обход `IAnswerGenerator`.

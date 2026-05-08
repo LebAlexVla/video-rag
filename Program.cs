@@ -17,6 +17,11 @@ LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration.AddJsonFile(
+    "appsettings.Local.json",
+    optional: true,
+    reloadOnChange: true);
+
 builder.Services.AddRazorPages();
 
 ConfigureOptions(builder.Services, builder.Configuration);
@@ -329,7 +334,7 @@ static void ConfigureOptions(IServiceCollection services, IConfiguration configu
         .AddOptions<EmbeddingsOptions>()
         .Bind(configuration.GetSection(EmbeddingsOptions.SectionName))
         .Validate(
-            options => IsSupportedProvider(options.Provider),
+            options => IsSupportedEmbeddingsProvider(options.Provider),
             "Embeddings provider must be 'ollama', 'openai', or 'gemini'.")
         .Validate(
             ValidateEmbeddingsProviderOptions,
@@ -340,7 +345,7 @@ static void ConfigureOptions(IServiceCollection services, IConfiguration configu
         .AddOptions<AnswersOptions>()
         .Bind(configuration.GetSection(AnswersOptions.SectionName))
         .Validate(
-            options => IsSupportedProvider(options.Provider),
+            options => IsSupportedAnswersProvider(options.Provider),
             "Answers provider must be 'ollama', 'openai', or 'deepseek'.")
         .Validate(
             ValidateAnswersProviderOptions,
@@ -501,12 +506,18 @@ static void ConfigureApplicationServices(IServiceCollection services)
     });
 }
 
-static bool IsSupportedProvider(string? provider)
+static bool IsSupportedEmbeddingsProvider(string? provider)
 {
     return string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(provider, "deepseek", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(provider, "gemini", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsSupportedAnswersProvider(string? provider)
+{
+    return string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(provider, "deepseek", StringComparison.OrdinalIgnoreCase);
 }
 
 static bool ValidateEmbeddingsProviderOptions(EmbeddingsOptions options)
@@ -589,17 +600,15 @@ static void LoadDotEnv()
         Environment.SetEnvironmentVariable(key, value);
     }
 
-    // Map DEEPSEEK_API_TOKEN to configuration path used by AnswersOptions.DeepSeek.ApiKey
-    var deepSeekToken = Environment.GetEnvironmentVariable("DEEPSEEK_API_TOKEN");
+    var deepSeekApiKey = Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY");
 
-    if (!string.IsNullOrEmpty(deepSeekToken))
-        Environment.SetEnvironmentVariable("Answers__DeepSeek__ApiKey", deepSeekToken);
+    if (!string.IsNullOrWhiteSpace(deepSeekApiKey))
+        Environment.SetEnvironmentVariable("Answers__DeepSeek__ApiKey", deepSeekApiKey);
 
-    // Map GOOGLE_API_TOKEN to configuration path used by EmbeddingsOptions.Gemini.ApiKey
-    var googleToken = Environment.GetEnvironmentVariable("GOOGLE_API_TOKEN");
+    var geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 
-    if (!string.IsNullOrEmpty(googleToken))
-        Environment.SetEnvironmentVariable("Embeddings__Gemini__ApiKey", googleToken);
+    if (!string.IsNullOrWhiteSpace(geminiApiKey))
+        Environment.SetEnvironmentVariable("Embeddings__Gemini__ApiKey", geminiApiKey);
 }
 
 abstract record CliCommand;

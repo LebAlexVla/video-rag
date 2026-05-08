@@ -19,5 +19,5 @@ public sealed class DeepSeekProviderOptions
 
     public string ApiKey { get; set; } = string.Empty;
 
-    public string Model { get; set; } = "deepseek-chat";
+    public string Model { get; set; } = "deepseek-v4-flash";
 }

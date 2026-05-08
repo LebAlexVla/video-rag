@@ -55,7 +55,7 @@ public sealed class GeminiEmbeddingProvider : IEmbeddingProvider
             return Array.Empty<float[]>();
 
         // Documents are embedded as retrieval documents for optimal RAG semantic search
-        var url = $"/v1beta/models/{_modelName}:batchEmbedContents?key={_apiKey}";
+        var url = $"/v1beta/models/{_modelName}:batchEmbedContents";
 
         var requests = texts
             .Select(text => new
@@ -72,8 +72,10 @@ public sealed class GeminiEmbeddingProvider : IEmbeddingProvider
             Content = JsonContent.Create(new { requests })
         };
 
+        httpRequest.Headers.Add("x-goog-api-key", _apiKey);
+
         using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, "Gemini batch embeddings request", cancellationToken);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
@@ -100,7 +102,7 @@ public sealed class GeminiEmbeddingProvider : IEmbeddingProvider
         string taskType,
         CancellationToken cancellationToken)
     {
-        var url = $"/v1beta/models/{_modelName}:embedContent?key={_apiKey}";
+        var url = $"/v1beta/models/{_modelName}:embedContent";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
         {
@@ -113,8 +115,10 @@ public sealed class GeminiEmbeddingProvider : IEmbeddingProvider
             })
         };
 
+        httpRequest.Headers.Add("x-goog-api-key", _apiKey);
+
         using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, "Gemini embedding request", cancellationToken);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
@@ -153,5 +157,19 @@ public sealed class GeminiEmbeddingProvider : IEmbeddingProvider
         }
 
         return vector;
+    }
+
+    private static async Task EnsureSuccessAsync(
+        HttpResponseMessage response,
+        string providerOperation,
+        CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+
+        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        throw new InvalidOperationException(
+            $"{providerOperation} failed: {(int)response.StatusCode} {response.ReasonPhrase}. {errorBody}");
     }
 }
