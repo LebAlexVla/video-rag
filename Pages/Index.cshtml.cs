@@ -18,7 +18,7 @@ public sealed class IndexModel : PageModel
     [BindProperty]
     public AskInputModel Input { get; set; } = new();
 
-    public AskResponse? Response { get; private set; }
+    public AskResponse? AskResponse { get; private set; }
 
     public string? ErrorMessage { get; private set; }
 
@@ -43,7 +43,7 @@ public sealed class IndexModel : PageModel
                 topK: Input.TopK,
                 minScore: Input.MinScore);
 
-            Response = await _askService.AskAsync(request, cancellationToken);
+            AskResponse = await _askService.AskAsync(request, cancellationToken);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or HttpRequestException)
         {

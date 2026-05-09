@@ -206,27 +206,27 @@
         </div>
     }
 
-    @if (Model.Response is not null)
+    @if (Model.AskResponse is not null)
     {
         <div class="card">
             <h2>Ответ</h2>
 
-            @if (!Model.Response.UsedContext)
+            @if (!Model.AskResponse.UsedContext)
             {
                 <div class="fallback">
-                    @(Model.Response.Message ?? "Недостаточно релевантного контекста для ответа.")
+                    @(Model.AskResponse.Message ?? "Недостаточно релевантного контекста для ответа.")
                 </div>
             }
             else
             {
-                <div class="answer">@Model.Response.Answer</div>
+                <div class="answer">@Model.AskResponse.Answer</div>
 
-                @if (Model.Response.Sources.Count > 0)
+                @if (Model.AskResponse.Sources.Count > 0)
                 {
                     <div class="sources">
                         <h3>Источники</h3>
 
-                        @foreach (var source in Model.Response.Sources)
+                        @foreach (var source in Model.AskResponse.Sources)
                         {
                             <div class="source">
                                 <div class="source-title">@source.LectureTitle</div>

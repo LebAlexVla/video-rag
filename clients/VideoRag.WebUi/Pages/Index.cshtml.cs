@@ -62,7 +62,8 @@ public sealed class IndexModel : PageModel
                 MinScore: MinScore
             );
 
-            AskResponse = await _apiClient.AskAsync(request, cancellationToken);        }
+            AskResponse = await _apiClient.AskAsync(request, cancellationToken);
+        }
         catch (Exception ex)
         {
             ErrorMessage = ex.Message;
