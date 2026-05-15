@@ -9,6 +9,8 @@ public sealed class EmbeddingsOptions
     public OllamaProviderOptions Ollama { get; set; } = new();
 
     public OpenAiProviderOptions OpenAi { get; set; } = new();
+
+    public GeminiProviderOptions Gemini { get; set; } = new();
 }
 
 public sealed class OllamaProviderOptions
@@ -25,4 +27,15 @@ public sealed class OpenAiProviderOptions
     public string ApiKey { get; set; } = string.Empty;
 
     public string Model { get; set; } = string.Empty;
+}
+
+public sealed class GeminiProviderOptions
+{
+    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com";
+
+    public string ApiKey { get; set; } = string.Empty;
+
+    public string Model { get; set; } = "gemini-embedding-001";
+
+    public int OutputDimensionality { get; set; } = 768;
 }
