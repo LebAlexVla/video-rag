@@ -1,43 +1,44 @@
 # Implementation Guide
 
-Практические правила для разработки и расширения проекта.
+Практическое руководство по разработке и расширению проекта.
 
 Документ отвечает на вопросы:
 
-- куда класть код;
+- куда класть новый код;
 - какие зависимости допустимы;
-- как добавлять новые реализации провайдеров;
-- что считается архитектурным нарушением;
-- какие минимальные тесты нужны.
+- как добавлять новые providers и clients;
+- какие проверки делать перед merge.
 
-## Структура C# проекта
+Подробная архитектура описана в [Architecture](./architecture.md). Здесь — прикладные правила для ежедневной разработки.
+
+## 1. Структура проекта
 
 ```text
 src/
   Domain/
-    Entities/
-
   Application/
-    Abstractions/
-    Contracts/
-    Services/
-
   Infrastructure/
-    VideoSources/
-    Transcription/
-    Transcript/
-    Embeddings/
-    VectorStore/
-    Answers/
-    Configuration/
 
 Pages/
-  Index.cshtml
-  Index.cshtml.cs
-  _ViewImports.cshtml
+  встроенный Razor UI основного приложения
+
+clients/
+  внешние клиенты
+
+shared/
+  общие DTO-контракты
+
+scripts/
+  python-helper/
+
+docs/
+  документация
+
+data/
+  локальные данные проекта
 ```
 
-## Domain
+## 2. Domain
 
 `Domain` содержит предметные сущности и их инварианты.
 
@@ -61,28 +62,28 @@ AnswerResult
 
 В `Domain` нельзя класть:
 
-- DTO API;
-- DTO CLI;
-- JSON-модели helper;
+- HTTP DTO;
+- CLI DTO;
+- JSON-модели Python helper;
 - Qdrant payload models;
+- provider-specific models;
 - interfaces внешних интеграций;
-- зависимости на SDK, HTTP, файловую систему, Qdrant, Ollama, OpenAI.
+- работу с файлами, HTTP, SDK или БД.
 
-Правило: если тип описывает внешний транспорт или конкретный сценарий приложения, это не `Domain`.
+Правило: если тип описывает внешний транспорт, конкретный API или сценарий приложения, это не `Domain`.
 
-## Application
+## 3. Application
 
-`Application` содержит прикладные сценарии, contracts и abstractions.
-
-Application делится на три зоны:
+`Application` содержит сценарии, contracts и interfaces.
 
 ```text
-Application/Abstractions
-Application/Contracts
-Application/Services
+Application/
+  Abstractions/
+  Contracts/
+  Services/
 ```
 
-### Application/Abstractions
+### Abstractions
 
 Здесь лежат interfaces, через которые application layer работает с внешним миром.
 
@@ -101,17 +102,11 @@ ILectureIngestService
 IAskService
 ```
 
-Правила:
+Новый interface добавляется только если появляется реальная граница ответственности или несколько возможных реализаций.
 
-- interfaces внешних зависимостей лежат здесь;
-- application services зависят от interfaces, а не от concrete classes;
-- новые provider interfaces добавляются только если существующих abstractions недостаточно.
+### Contracts
 
-Не нужно добавлять интерфейс, если он не используется для реальной границы или замены реализации.
-
-### Application/Contracts
-
-Здесь лежат DTO и contracts прикладных сценариев.
+Здесь лежат request/response models прикладных сценариев.
 
 Примеры:
 
@@ -130,13 +125,9 @@ EmbeddedLectureChunk
 ErrorInfo
 ```
 
-Правила:
+Contracts не должны зависеть от provider SDK, HTTP clients, Qdrant-specific моделей или UI.
 
-- request/response models для application services лежат здесь;
-- промежуточные модели между application и infrastructure лежат здесь;
-- contracts должны быть независимы от SDK и конкретных провайдеров.
-
-### Application/Services
+### Services
 
 Здесь лежит orchestration и прикладная логика.
 
@@ -146,27 +137,27 @@ ErrorInfo
 AskService
 LectureIngestService
 ContextRetriever
-AnswerGenerator
 Chunker
+AnswerGenerator
 ```
 
 Application services могут:
 
-- валидировать прикладные requests;
+- валидировать requests;
 - вызывать abstractions;
-- управлять последовательностью сценария;
-- применять business/application rules;
+- управлять последовательностью use case;
+- применять application rules;
 - возвращать contracts.
 
 Application services не должны:
 
 - напрямую создавать HTTP clients;
 - напрямую обращаться к Qdrant;
-- напрямую вызывать Ollama/OpenAI SDK;
+- напрямую вызывать provider SDK;
 - напрямую запускать Python process;
 - содержать UI-логику.
 
-## Infrastructure
+## 4. Infrastructure
 
 `Infrastructure` содержит concrete implementations interfaces из `Application/Abstractions`.
 
@@ -178,6 +169,7 @@ PythonTranscriptionRunner
 JsonTranscriptReader
 OllamaEmbeddingProvider
 OpenAiEmbeddingProvider
+GeminiEmbeddingProvider
 QdrantVectorStore
 OllamaAnswerGenerator
 OpenAiAnswerGenerator
@@ -190,112 +182,123 @@ QdrantInitializationService
 - работу с файловой системой;
 - запуск внешнего процесса;
 - Qdrant integration;
-- Ollama/OpenAI integration;
+- provider integrations;
 - чтение и валидацию внешнего JSON;
-- provider-specific code;
-- configuration options.
+- configuration options;
+- technical initialization.
 
 В `Infrastructure` нельзя класть:
 
-- orchestration всего use case;
 - UI-логику;
-- правила выбора пользовательского сценария;
-- domain decisions, которые не зависят от внешней интеграции.
+- orchestration всего пользовательского сценария;
+- правила, которые должны жить в Application;
+- domain decisions, не связанные с интеграцией.
 
-## Pages
+## 5. Entry points
 
-`Pages` — UI-слой для локального Razor test/demo UI.
+Entry points принимают ввод и передают управление в application layer.
 
-Он находится отдельно от `src/Domain`, `src/Application` и `src/Infrastructure`, потому что это входной слой приложения, а не часть бизнес-логики.
+К ним относятся:
 
-Примеры:
+- CLI;
+- Minimal API;
+- встроенный Razor UI;
+- external clients.
 
-```text
-Pages/Index.cshtml
-Pages/Index.cshtml.cs
-Pages/_ViewImports.cshtml
-```
+Entry points могут:
 
-### Правила для PageModel
-
-PageModel может зависеть от:
-
-```text
-IAskService
-```
-
-PageModel не должен зависеть от:
-
-```text
-QdrantVectorStore
-OllamaAnswerGenerator
-OpenAiAnswerGenerator
-OllamaEmbeddingProvider
-PythonTranscriptionRunner
-JsonTranscriptReader
-HttpClient for providers
-Qdrant HTTP API
-Ollama HTTP API
-OpenAI HTTP API
-```
-
-PageModel должен:
-
-- принимать UI input;
-- валидировать форму на уровне UI;
+- читать аргументы команды;
+- принимать HTTP request;
+- валидировать форму;
 - создавать application request;
 - вызывать application service;
-- показывать result/error.
+- маппить response в DTO;
+- показывать результат пользователю.
 
-PageModel не должен:
+Entry points не должны:
 
 - выполнять retrieval;
 - строить embeddings;
 - генерировать prompt;
-- обращаться к Qdrant;
-- обращаться к Ollama/OpenAI;
-- запускать Python helper;
-- читать transcript files напрямую.
+- обращаться к Qdrant напрямую;
+- запускать Python helper напрямую;
+- вызывать provider APIs напрямую.
 
-## CLI / API composition
+## 6. External clients
 
-CLI и Minimal API являются входными слоями.
+Внешние клиенты находятся в `clients/`.
 
-Они могут:
-
-- принимать аргументы/HTTP requests;
-- создавать application contracts;
-- вызывать application services;
-- возвращать ответ пользователю.
-
-Они не должны напрямую работать с infrastructure classes.
-
-Composition root связывает interfaces и implementations через DI. Это единственное место, где допустимо знать concrete infrastructure classes.
-
-## Как добавлять новый transcription provider
-
-Transcription provider добавляется внутри Python helper.
-
-Правила:
-
-- входной JSON C# -> Python не должен ломаться;
-- выходной `transcript.json` должен сохранять тот же контракт;
-- exit codes должны оставаться совместимыми;
-- Python не должен выполнять chunking;
-- Python не должен строить embeddings;
-- Python не должен писать в Qdrant;
-- Application C# не должен знать детали конкретного transcription provider.
-
-Если нужно выбрать provider, выбор передаётся через существующие поля request/config, например:
+Примеры:
 
 ```text
-transcriptionProvider
-transcriptionModel
+clients/VideoRag.TelegramBot
+clients/VideoRag.WebUi
 ```
 
-## Как добавлять новый embedding provider
+Клиенты используют основной HTTP API:
 
-Новый embedding provider добавляется как implementation `IEmbeddingProvider`.
+```text
+POST /ask
+GET /health
+```
+
+Если есть общий контракт, клиенты используют:
+
+```text
+shared/VideoRag.Contracts
+```
+
+Правила для клиентов:
+
+- клиент не содержит RAG-логику;
+- клиент не обращается напрямую к Qdrant;
+- клиент не запускает Python helper;
+- клиент не строит embeddings;
+- клиент не вызывает answer provider;
+- клиент не читает transcript/registry files;
+- адрес API задаётся через конфигурацию;
+- ошибки API должны отображаться пользователю понятным сообщением.
+
+При изменении внешнего API нужно синхронно обновить:
+
+1. shared contracts;
+2. mapper в основном API;
+3. клиенты;
+4. quick start, если меняется запуск или формат запроса.
+
+## 7. Python helper
+
+Python helper находится в:
+
+```text
+scripts/python-helper/
+```
+
+Он используется только для транскрибации.
+
+Разрешено:
+
+- читать input JSON;
+- читать локальный видеофайл;
+- запускать transcription provider;
+- писать transcript JSON;
+- писать output JSON;
+- возвращать exit code.
+
+Запрещено:
+
+- делать chunking;
+- строить embeddings;
+- писать в Qdrant;
+- выполнять retrieval;
+- генерировать answer;
+- поднимать HTTP service.
+
+Если добавляется новый transcription provider, он должен сохранить совместимый JSON-контракт C# ↔ Python.
+
+## 8. Provider changes
+
+### Новый embedding provider
 
 Куда класть:
 
@@ -303,26 +306,23 @@ transcriptionModel
 src/Infrastructure/Embeddings/
 ```
 
-Что нужно сделать:
+Что сделать:
 
 1. Реализовать `IEmbeddingProvider`.
-2. Добавить provider-specific options в configuration.
-3. Зарегистрировать реализацию в DI.
-4. Документировать vector size.
-5. Проверить совместимость с Qdrant collection.
-6. Добавить минимальные tests/parsing checks, если provider возвращает сложный JSON.
+2. Добавить provider-specific options.
+3. Зарегистрировать provider в DI.
+4. Проверить размерность output vector.
+5. Описать, когда нужен rebuild.
+6. Добавить parsing/validation tests, если response provider сложный.
 
-Правила:
+Важно:
 
-- provider должен возвращать стабильную размерность vectors;
-- `EmbedAsync` и `EmbedBatchAsync` должны быть согласованы;
+- `EmbedAsync` и `EmbedBatchAsync` должны возвращать vectors одной размерности;
 - пустой input должен обрабатываться предсказуемо;
-- смена embedding model/provider/vector space требует rebuild;
-- embeddings разных моделей нельзя смешивать в одной collection.
+- смена embedding provider или model требует rebuild;
+- embeddings разных моделей нельзя смешивать в одной Qdrant collection.
 
-## Как добавлять новый answer provider
-
-Новый answer provider добавляется как implementation `IAnswerGenerator`.
+### Новый answer provider
 
 Куда класть:
 
@@ -330,138 +330,106 @@ src/Infrastructure/Embeddings/
 src/Infrastructure/Answers/
 ```
 
-Что нужно сделать:
+Что сделать:
 
 1. Реализовать `IAnswerGenerator`.
-2. Добавить provider-specific options в configuration.
-3. Зарегистрировать реализацию в DI.
-4. Сохранить правило grounded answer.
-5. Добавить fallback rule в prompt.
+2. Добавить provider-specific options.
+3. Зарегистрировать provider в DI.
+4. Сохранить grounded answer rules.
+5. Обработать fallback.
+6. Добавить parsing/validation tests, если response provider сложный.
 
-Правила:
+Answer provider не должен выполнять retrieval, строить embeddings или обращаться к Qdrant.
 
-- generator получает только вопрос и найденный context;
-- generator не должен выполнять retrieval;
-- generator не должен строить embeddings;
-- generator не должен обращаться к Qdrant;
-- generator не должен отвечать по внешним знаниям, если контекста недостаточно.
-
-Prompt должен явно запрещать добавление фактов вне контекста.
-
-### DeepSeek как текущий answer provider
-
-DeepSeek API совместим с форматом OpenAI. Реализация переиспользует `OpenAiAnswerGenerator` без изменений кода — отличается только `HttpClient` (`deepseek-answers`) и `BaseAddress`.
-
-Конфигурация провайдера — в `appsettings.json` секция `Answers.DeepSeek`. API-ключ — через `.env` (переменная `DEEPSEEK_API_TOKEN`). Загружается автоматически при старте через `LoadDotEnv()` в `Program.cs`.
-
-Чтобы добавить другой OpenAI-совместимый провайдер по аналогии:
-
-1. Добавить `XxxProviderOptions` в `AnswersOptions.cs`.
-2. Добавить `HttpClient` в `ConfigureHttpClients`.
-3. Добавить case в switch в `ConfigureApplicationServices`.
-4. Добавить case в `IsSupportedProvider` и `ValidateAnswersProviderOptions`.
-5. Добавить секцию в `appsettings.json`.
-
-## Как добавлять downloader в будущем
-
-Downloader добавляется как новая implementation `IVideoSource`.
-
-Куда класть:
-
-```text
-src/Infrastructure/VideoSources/
-```
-
-Целевое поведение:
-
-```text
-input URL/path -> local video file path
-```
-
-Правила:
-
-- после `ResolveAsync` pipeline должен получить локальный файл;
-- downstream ingest flow не должен знать, был файл локальным или скачанным;
-- скачивание не должно смешиваться с транскрибацией;
-- downloader не должен вызывать Python helper;
-- downloader не должен писать в Qdrant;
-- downloader не должен менять transcript contract.
-
-Если downloader требует сложной политики retry/cache/auth, это отдельное архитектурное решение.
-
-## Rebuild и embedding space
+## 9. Rebuild и embedding space
 
 Rebuild используется для ручной пересборки индекса.
 
-Правила:
+Rebuild нужен, если меняется:
 
-- rebuild использует сохранённые `transcript.json`;
-- rebuild не обязан повторно запускать Python helper;
-- rebuild может очищать индекс перед повторной записью;
-- при смене embedding space старый индекс считается несовместимым.
+- embedding provider;
+- embedding model;
+- vector size;
+- semantic embedding space;
+- chunking strategy, если старые chunks больше не соответствуют новой логике.
 
-Если меняется vector size, простого clear points может быть недостаточно. Нужно удалить старую Qdrant collection или volume и затем выполнить ingest/rebuild заново.
+Если меняется только answer provider, rebuild не нужен.
 
-## Минимальные правила тестирования
+Если меняется vector size, может потребоваться удалить старую Qdrant collection или volume.
 
-Минимально полезные tests:
+## 10. Минимальные проверки перед merge
 
-### Domain
+Перед merge желательно проверить:
 
-- создание валидных entities;
-- ошибка при пустых обязательных полях;
-- ошибка при невалидных timestamps;
-- проверка порядка transcript segments.
+```bash
+dotnet build
+```
 
-### Application
+Если есть tests:
 
-- `Chunker` сохраняет порядок текста;
-- `Chunker` выставляет chunk indexes;
-- `Chunker` выставляет примерные timestamps;
-- `ContextRetriever` применяет `TopK` и `MinScore`;
-- `AskService` возвращает fallback при пустом context;
-- `LectureIngestService` корректно обрабатывает ошибку transcription runner.
+```bash
+dotnet test
+```
 
-### Infrastructure
+Для основного сценария:
 
-- `JsonTranscriptReader` читает валидный transcript;
-- `JsonTranscriptReader` падает на невалидном transcript;
-- provider response parsing tests;
-- Qdrant request payload shape tests, если возможно без реального Qdrant.
+```bash
+docker compose up -d
+dotnet run -- ingest "data/videos/lecture_0.mp4"
+dotnet run
+```
 
-### UI
+Проверить:
 
-- PageModel создаёт `AskRequest`;
-- PageModel вызывает `IAskService`;
-- PageModel не содержит infrastructure calls.
+```text
+GET /health
+POST /ask
+```
 
-Не нужно начинать с тяжёлых end-to-end tests. Сначала достаточно unit tests на стабильные правила.
+Если менялись клиенты:
 
-## Признаки архитектурных нарушений
+```bash
+dotnet run --project .\clients\VideoRag.TelegramBot\VideoRag.TelegramBot.csproj
+dotnet run --project .\clients\VideoRag.WebUi\VideoRag.WebUi.csproj
+```
 
-Нарушение, если:
+Если менялись embeddings или chunking, проверить `rebuild`.
 
-- Python helper делает chunking;
-- Python helper строит embeddings;
-- Python helper пишет в Qdrant;
-- Python helper отвечает пользователю;
-- между C# и Python появляется internal REST/gRPC/queue;
-- API endpoint напрямую вызывает Qdrant;
-- Razor PageModel напрямую вызывает infrastructure implementation;
-- Application service создаёт concrete infrastructure class;
-- Domain зависит от Application или Infrastructure;
-- Infrastructure содержит полный use case orchestration;
-- Qdrant используется как общая база приложения;
-- embeddings разных моделей смешиваются в одной collection;
-- Razor UI становится основным продуктовым frontend-контуром;
-- добавляется downloader без сохранения локального файла как результата `IVideoSource`.
+## 11. Документация при изменениях
 
-## Общее правило
+Обновить документацию нужно, если изменились:
 
-Если новая логика относится к сценарию пользователя — вероятно, это `Application`.
+- команды запуска;
+- конфигурация;
+- env-переменные;
+- внешний HTTP API;
+- shared contracts;
+- структура проекта;
+- provider defaults;
+- правила rebuild;
+- архитектурные границы.
 
-Если новая логика относится к внешней системе, файлам, HTTP, SDK или процессам — вероятно, это `Infrastructure`.
+Куда вносить изменения:
 
-Если новая логика только принимает ввод и показывает результат — это входной слой: CLI, API или Pages.
+```text
+docs/quick-start.md              запуск и команды
+docs/troubleshooting.md          типовые ошибки
+docs/team/architecture.md        архитектурные правила
+docs/team/implementation-guide.md практические правила разработки
+docs/llm/llm-context.md          устойчивый контекст для AI/LLM
+docs/adr/                        новые архитектурные решения
+```
 
-Если новая модель описывает предметную сущность и не зависит от транспорта — это `Domain`.
+## 12. Типовые ошибки проектирования
+
+Избегать:
+
+- переноса RAG-логики в UI или clients;
+- прямого вызова Qdrant из API endpoint;
+- прямого вызова provider SDK из PageModel;
+- запуска Python helper из клиента;
+- помещения infrastructure classes в Application;
+- помещения interfaces в Domain;
+- смешивания embeddings разных моделей;
+- изменения embedding provider без rebuild;
+- расширения Python helper до второго backend.

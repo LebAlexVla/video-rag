@@ -1,71 +1,77 @@
 # Documentation
 
-Главная навигация по документации проекта.
+Главная навигация по документации проекта Video Lecture RAG Assistant.
 
-Документация разделена на четыре группы:
+## Быстрый старт
 
-- быстрый запуск и решение типовых проблем;
-- документы для команды разработки;
-- контекст для LLM / AI-agent;
-- ADR с принятыми архитектурными решениями.
+- [Quick start](./quick-start.md)  
+  Как установить зависимости, настроить providers, выполнить ingest, запустить API, UI и клиентов.
 
-## Что читать
+- [Troubleshooting](./troubleshooting.md)  
+  Типовые ошибки локального запуска и способы исправления.
 
-### Хочу просто запустить проект
+## Документы для разработки
+
+- [Overview](./team/overview.md)  
+  Краткое описание проекта, основных сценариев и компонентов.
+
+- [Architecture](./team/architecture.md)  
+  Подробная архитектура: роли компонентов, сценарии ingest / ask / rebuild, слои и зависимости.
+
+- [Implementation guide](./team/implementation-guide.md)  
+  Практические правила разработки: куда класть код, как добавлять providers и clients, что проверять перед merge.
+
+## Контекст для AI/LLM
+
+- [LLM context](./llm/llm-context.md)  
+  Компактный технический контекст для AI/LLM-агентов, которые генерируют, проверяют или рефакторят код проекта.
+
+## Архитектурные решения
+
+- [ADR index](./adr/README.md)  
+  Список зафиксированных архитектурных решений.
+
+ADR объясняют, почему приняты ключевые решения. Они не заменяют quick start, architecture или implementation guide.
+
+## Что читать по ситуации
+
+### Нужно просто запустить проект
 
 1. [Quick start](./quick-start.md)
 2. [Troubleshooting](./troubleshooting.md), если запуск не проходит
 
-### Я новый разработчик в команде
+### Нужно понять проект перед разработкой
 
 1. [Overview](./team/overview.md)
 2. [Architecture](./team/architecture.md)
 3. [Implementation guide](./team/implementation-guide.md)
-4. [ADR](./adr/README.md), если нужно понять причины решений
 
-### Я меняю архитектуру
+### Нужно изменить архитектуру
 
 1. [Architecture](./team/architecture.md)
-2. [LLM context](./llm/llm-context.md)
-3. [ADR](./adr/README.md)
+2. [ADR index](./adr/README.md)
+3. [LLM context](./llm/llm-context.md)
 
-Перед изменением архитектурных решений нужно проверить, не противоречит ли изменение существующим ADR.
+Если изменение противоречит существующим ADR, нужно добавить новый ADR или обновить старый.
 
-### Я использую LLM / AI-agent для генерации кода
+### Нужно работать с AI/LLM-агентом
 
-Используй основной технический контекст:
+Используй:
 
-- [LLM context](./llm/llm-context.md)
+1. [LLM context](./llm/llm-context.md)
+2. [Architecture](./team/architecture.md)
+3. [Implementation guide](./team/implementation-guide.md)
 
-Этот документ должен быть главным источником ограничений для генерации кода.
+`LLM context` должен быть первым файлом, который получает AI/LLM-агент.
 
-## Быстрый запуск и диагностика
+## Основные части проекта
 
-- [Quick start](./quick-start.md)  
-  Что установить и как локально запустить проект.
-
-- [Troubleshooting](./troubleshooting.md)  
-  Типовые ошибки запуска и способы исправления.
-
-## Документы для команды
-
-- [Overview](./team/overview.md)  
-  Кратко: что делает проект, что входит в MVP, что не входит и какой результат считается готовым.
-
-- [Architecture](./team/architecture.md)  
-  Архитектура системы, основные компоненты, сценарии ingest / ask / rebuild и правила зависимостей.
-
-- [Implementation guide](./team/implementation-guide.md)  
-  Практические правила разработки: куда класть код, как расширять систему и чего не делать.
-
-## Контекст для LLM
-
-- [LLM context](./llm/llm-context.md)  
-  Канонический технический контекст для AI/LLM-агентов.
-
-## ADR
-
-- [ADR index](./adr/README.md)  
-  Список принятых архитектурных решений.
-
-ADR фиксируют причины ключевых решений. Они не заменяют quick start, architecture или implementation guide.
+```text
+src/                    основной C# код: Domain, Application, Infrastructure
+Pages/                  встроенный Razor UI основного приложения
+clients/                внешние клиенты
+shared/                 общие DTO-контракты
+scripts/python-helper/  Python helper для транскрибации
+docs/                   документация
+data/                   локальные данные проекта
+```
