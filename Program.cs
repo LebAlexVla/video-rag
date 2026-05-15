@@ -11,6 +11,8 @@ using VideoLectureRagAssistant.Infrastructure.Transcript;
 using VideoLectureRagAssistant.Infrastructure.Transcription;
 using VideoLectureRagAssistant.Infrastructure.VectorStore;
 using VideoLectureRagAssistant.Infrastructure.VideoSources;
+using VideoRag.Contracts;
+using VideoLectureRagAssistant.Presentation.Http;
 
 // Load .env file if present and map DEEPSEEK_API_TOKEN to configuration
 LoadDotEnv();
@@ -52,7 +54,6 @@ MapEndpoints(app);
 app.MapRazorPages();
 
 app.Run();
-
 static void MapEndpoints(WebApplication app)
 {
     app.MapGet("/health", () => Results.Ok(new
@@ -62,15 +63,22 @@ static void MapEndpoints(WebApplication app)
 
     app.MapPost(
         "/ask",
-        async Task<Results<Ok<AskResponse>, BadRequest<ProblemDetails>>> (
-            AskRequest request,
+        async Task<Results<Ok<AskResponseDto>, BadRequest<ProblemDetails>>> (
+            AskRequestDto request,
             IAskService askService,
             CancellationToken cancellationToken) =>
         {
             try
             {
-                var response = await askService.AskAsync(request, cancellationToken);
-                return TypedResults.Ok(response);
+                var appRequest = new AskRequest(
+                    request.Question,
+                    request.TopK,
+                    request.MinScore
+                );
+
+                var appResponse = await askService.AskAsync(appRequest, cancellationToken);
+
+                return TypedResults.Ok(AskHttpMapper.ToDto(appResponse));
             }
             catch (ArgumentException ex)
             {

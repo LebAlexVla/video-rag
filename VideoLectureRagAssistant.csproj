@@ -5,5 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>VideoLectureRagAssistant</RootNamespace>
     <AssemblyName>VideoLectureRagAssistant</AssemblyName>
+    <DefaultItemExcludes>$(DefaultItemExcludes);shared\**;clients\**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="shared\VideoRag.Contracts\VideoRag.Contracts.csproj" />
+  </ItemGroup>
 </Project>
