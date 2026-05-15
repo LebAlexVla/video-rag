@@ -13,3 +13,5 @@ data/registry/*
 scripts/python-helper/data/*
 **/appsettings.Development.json
 **/Properties/launchSettings.json
+.env
+appsettings.Local.json

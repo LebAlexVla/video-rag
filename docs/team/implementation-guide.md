@@ -348,6 +348,20 @@ src/Infrastructure/Answers/
 
 Prompt должен явно запрещать добавление фактов вне контекста.
 
+### DeepSeek как текущий answer provider
+
+DeepSeek API совместим с форматом OpenAI. Реализация переиспользует `OpenAiAnswerGenerator` без изменений кода — отличается только `HttpClient` (`deepseek-answers`) и `BaseAddress`.
+
+Конфигурация провайдера — в `appsettings.json` секция `Answers.DeepSeek`. API-ключ — через `.env` (переменная `DEEPSEEK_API_TOKEN`). Загружается автоматически при старте через `LoadDotEnv()` в `Program.cs`.
+
+Чтобы добавить другой OpenAI-совместимый провайдер по аналогии:
+
+1. Добавить `XxxProviderOptions` в `AnswersOptions.cs`.
+2. Добавить `HttpClient` в `ConfigureHttpClients`.
+3. Добавить case в switch в `ConfigureApplicationServices`.
+4. Добавить case в `IsSupportedProvider` и `ValidateAnswersProviderOptions`.
+5. Добавить секцию в `appsettings.json`.
+
 ## Как добавлять downloader в будущем
 
 Downloader добавляется как новая implementation `IVideoSource`.

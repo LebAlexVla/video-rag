@@ -11,7 +11,7 @@
 - .NET 8 SDK
 - Docker
 - Python 3.10+
-- Ollama
+- Ollama — только если нет API-ключей (см. шаг 4)
 
 Проверить .NET:
 
@@ -31,12 +31,6 @@ docker compose version
 
 ```bash
 python --version
-```
-
-Проверить Ollama:
-
-```bash
-ollama --version
 ```
 
 ## 2. Установить Python dependencies
@@ -77,33 +71,46 @@ http://localhost:6333/dashboard
 
 Коллекция Qdrant создаётся приложением автоматически при запуске, если её ещё нет.
 
-## 4. Подготовить Ollama models
+## 4. Настроить провайдеры
 
-Проверить, что Ollama API отвечает:
+По умолчанию проект использует cloud/API режим:
 
-```powershell
-Invoke-WebRequest http://localhost:11434/api/version
+- DeepSeek для генерации ответов;
+- Google Gemini для embeddings.
+
+Для этого нужен файл `.env` в корне проекта:
+
+```env
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-Проверить установленные модели:
+Файл `.env` не коммитится в Git.
+
+### Локальный режим через Ollama
+
+Если нет API-ключей или нужен полностью локальный запуск, можно переключиться на Ollama.
+
+Проверить Ollama:
 
 ```bash
-ollama list
+ollama --version
 ```
 
-Подтянуть модель для embeddings:
+Скачать модели:
 
 ```bash
 ollama pull embeddinggemma
-```
-
-Подтянуть модель для генерации ответа:
-
-```bash
 ollama pull llama3.1
 ```
 
-Названия моделей должны совпадать с настройками в `appsettings.json`.
+Создать локальный override-конфиг:
+
+```powershell
+Copy-Item appsettings.Ollama.example.json appsettings.Local.json
+```
+
+`appsettings.Local.json` не коммитится. Он автоматически подхватывается приложением и переопределяет настройки из `appsettings.json`.
 
 ## 5. Проверить конфигурацию
 
@@ -121,6 +128,14 @@ Chunking
 ```
 
 Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
+
+По умолчанию `Answers.Provider = "deepseek"` и `Embeddings.Provider = "gemini"`. API-ключи передаются через `.env`, а не через `appsettings.json`.
+
+Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
+
+Важно: при смене embedding provider нужно пересобрать индекс.
+
+Например, если chunks были embedded через Gemini, а потом проект переключили на Ollama, старую Qdrant collection нужно пересоздать. Даже если `Qdrant.VectorSize` совпадает, embedding space у разных моделей разный.
 
 ## 6. Подготовить видео
 
