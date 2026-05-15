@@ -15,3 +15,4 @@ CLI-helper для транскрибации видео в ingest flow.
 
 ```bash
 python scripts/python-helper/main.py data/jobs/example.input.json data/jobs/example.output.json
+```

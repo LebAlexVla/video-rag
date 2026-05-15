@@ -28,7 +28,7 @@ public sealed class IndexModel : PageModel
         {
             Question = "О чём эта лекция?",
             TopK = 5,
-            MinScore = 0.1
+            MinScore = 0.3
         };
     }
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
@@ -63,6 +63,6 @@ public sealed class IndexModel : PageModel
         public int TopK { get; set; } = 5;
 
         [Range(0, 1, ErrorMessage = "MinScore должен быть в диапазоне 0..1.")]
-        public double MinScore { get; set; } = 0.1;
+        public double MinScore { get; set; } = 0.3;
     }
 }

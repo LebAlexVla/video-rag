@@ -19,7 +19,7 @@ public sealed class VideoRagApiClient
         var request = new AskRequestDto(
             Question: question,
             TopK: 5,
-            MinScore: 0.5
+            MinScore: 0.3
         );
 
         var response = await _httpClient.PostAsJsonAsync(

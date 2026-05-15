@@ -14,7 +14,7 @@ using VideoLectureRagAssistant.Infrastructure.VideoSources;
 using VideoRag.Contracts;
 using VideoLectureRagAssistant.Presentation.Http;
 
-// Load .env file if present and map DEEPSEEK_API_TOKEN to configuration
+// Load .env file if present
 LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);

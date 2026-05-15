@@ -20,7 +20,7 @@ public sealed class IndexModel : PageModel
     public int TopK { get; set; } = 5;
 
     [BindProperty]
-    public double MinScore { get; set; } = 0.5;
+    public double MinScore { get; set; } = 0.3;
     
     public AskResponseDto? AskResponse { get; private set; }
     public string? ErrorMessage { get; private set; }
