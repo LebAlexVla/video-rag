@@ -5,7 +5,7 @@ public sealed record class AskRequest
     public AskRequest(
         string question,
         int topK = 5,
-        double minScore = 0.5)
+        double minScore = 0.3)
     {
         if (string.IsNullOrWhiteSpace(question))
             throw new ArgumentException("Question is required.", nameof(question));

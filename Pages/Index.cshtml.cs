@@ -18,7 +18,7 @@ public sealed class IndexModel : PageModel
     [BindProperty]
     public AskInputModel Input { get; set; } = new();
 
-    public AskResponse? Response { get; private set; }
+    public AskResponse? AskResponse { get; private set; }
 
     public string? ErrorMessage { get; private set; }
 
@@ -28,7 +28,7 @@ public sealed class IndexModel : PageModel
         {
             Question = "О чём эта лекция?",
             TopK = 5,
-            MinScore = 0.1
+            MinScore = 0.3
         };
     }
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
@@ -43,7 +43,7 @@ public sealed class IndexModel : PageModel
                 topK: Input.TopK,
                 minScore: Input.MinScore);
 
-            Response = await _askService.AskAsync(request, cancellationToken);
+            AskResponse = await _askService.AskAsync(request, cancellationToken);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or HttpRequestException)
         {
@@ -63,6 +63,6 @@ public sealed class IndexModel : PageModel
         public int TopK { get; set; } = 5;
 
         [Range(0, 1, ErrorMessage = "MinScore должен быть в диапазоне 0..1.")]
-        public double MinScore { get; set; } = 0.1;
+        public double MinScore { get; set; } = 0.3;
     }
 }

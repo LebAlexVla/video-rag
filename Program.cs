@@ -11,8 +11,18 @@ using VideoLectureRagAssistant.Infrastructure.Transcript;
 using VideoLectureRagAssistant.Infrastructure.Transcription;
 using VideoLectureRagAssistant.Infrastructure.VectorStore;
 using VideoLectureRagAssistant.Infrastructure.VideoSources;
+using VideoRag.Contracts;
+using VideoLectureRagAssistant.Presentation.Http;
+
+// Load .env file if present
+LoadDotEnv();
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration.AddJsonFile(
+    "appsettings.Local.json",
+    optional: true,
+    reloadOnChange: true);
 
 builder.Services.AddRazorPages();
 
@@ -44,7 +54,6 @@ MapEndpoints(app);
 app.MapRazorPages();
 
 app.Run();
-
 static void MapEndpoints(WebApplication app)
 {
     app.MapGet("/health", () => Results.Ok(new
@@ -54,15 +63,22 @@ static void MapEndpoints(WebApplication app)
 
     app.MapPost(
         "/ask",
-        async Task<Results<Ok<AskResponse>, BadRequest<ProblemDetails>>> (
-            AskRequest request,
+        async Task<Results<Ok<AskResponseDto>, BadRequest<ProblemDetails>>> (
+            AskRequestDto request,
             IAskService askService,
             CancellationToken cancellationToken) =>
         {
             try
             {
-                var response = await askService.AskAsync(request, cancellationToken);
-                return TypedResults.Ok(response);
+                var appRequest = new AskRequest(
+                    request.Question,
+                    request.TopK,
+                    request.MinScore
+                );
+
+                var appResponse = await askService.AskAsync(appRequest, cancellationToken);
+
+                return TypedResults.Ok(AskHttpMapper.ToDto(appResponse));
             }
             catch (ArgumentException ex)
             {
@@ -326,8 +342,8 @@ static void ConfigureOptions(IServiceCollection services, IConfiguration configu
         .AddOptions<EmbeddingsOptions>()
         .Bind(configuration.GetSection(EmbeddingsOptions.SectionName))
         .Validate(
-            options => IsSupportedProvider(options.Provider),
-            "Embeddings provider must be either 'ollama' or 'openai'.")
+            options => IsSupportedEmbeddingsProvider(options.Provider),
+            "Embeddings provider must be 'ollama', 'openai', or 'gemini'.")
         .Validate(
             ValidateEmbeddingsProviderOptions,
             "Embeddings provider configuration is invalid.")
@@ -337,8 +353,8 @@ static void ConfigureOptions(IServiceCollection services, IConfiguration configu
         .AddOptions<AnswersOptions>()
         .Bind(configuration.GetSection(AnswersOptions.SectionName))
         .Validate(
-            options => IsSupportedProvider(options.Provider),
-            "Answers provider must be either 'ollama' or 'openai'.")
+            options => IsSupportedAnswersProvider(options.Provider),
+            "Answers provider must be 'ollama', 'openai', or 'deepseek'.")
         .Validate(
             ValidateAnswersProviderOptions,
             "Answers provider configuration is invalid.")
@@ -365,6 +381,12 @@ static void ConfigureHttpClients(IServiceCollection services)
         client.BaseAddress = new Uri(options.OpenAi.BaseUrl);
     });
 
+    services.AddHttpClient("gemini-embeddings", (serviceProvider, client) =>
+    {
+        var options = serviceProvider.GetRequiredService<IOptions<EmbeddingsOptions>>().Value;
+        client.BaseAddress = new Uri(options.Gemini.BaseUrl);
+    });
+
     services.AddHttpClient("ollama-answers", (serviceProvider, client) =>
     {
         var options = serviceProvider.GetRequiredService<IOptions<AnswersOptions>>().Value;
@@ -375,6 +397,12 @@ static void ConfigureHttpClients(IServiceCollection services)
     {
         var options = serviceProvider.GetRequiredService<IOptions<AnswersOptions>>().Value;
         client.BaseAddress = new Uri(options.OpenAi.BaseUrl);
+    });
+
+    services.AddHttpClient("deepseek-answers", (serviceProvider, client) =>
+    {
+        var options = serviceProvider.GetRequiredService<IOptions<AnswersOptions>>().Value;
+        client.BaseAddress = new Uri(options.DeepSeek.BaseUrl);
     });
 }
 
@@ -421,6 +449,12 @@ static void ConfigureApplicationServices(IServiceCollection services)
                 apiKey: options.OpenAi.ApiKey,
                 modelName: options.OpenAi.Model),
 
+            "gemini" => new GeminiEmbeddingProvider(
+                httpClient: httpClientFactory.CreateClient("gemini-embeddings"),
+                apiKey: options.Gemini.ApiKey,
+                modelName: options.Gemini.Model,
+                outputDimensionality: options.Gemini.OutputDimensionality),
+
             _ => throw new InvalidOperationException("Unsupported embeddings provider.")
         };
     });
@@ -451,6 +485,11 @@ static void ConfigureApplicationServices(IServiceCollection services)
                 apiKey: options.OpenAi.ApiKey,
                 modelName: options.OpenAi.Model),
 
+            "deepseek" => new OpenAiAnswerGenerator(
+                httpClient: httpClientFactory.CreateClient("deepseek-answers"),
+                apiKey: options.DeepSeek.ApiKey,
+                modelName: options.DeepSeek.Model),
+
             _ => throw new InvalidOperationException("Unsupported answers provider.")
         };
     });
@@ -475,10 +514,18 @@ static void ConfigureApplicationServices(IServiceCollection services)
     });
 }
 
-static bool IsSupportedProvider(string? provider)
+static bool IsSupportedEmbeddingsProvider(string? provider)
 {
     return string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase) ||
-           string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase);
+           string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(provider, "gemini", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsSupportedAnswersProvider(string? provider)
+{
+    return string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(provider, "deepseek", StringComparison.OrdinalIgnoreCase);
 }
 
 static bool ValidateEmbeddingsProviderOptions(EmbeddingsOptions options)
@@ -497,6 +544,13 @@ static bool ValidateEmbeddingsProviderOptions(EmbeddingsOptions options)
             Uri.TryCreate(options.OpenAi.BaseUrl, UriKind.Absolute, out _) &&
             !string.IsNullOrWhiteSpace(options.OpenAi.ApiKey) &&
             !string.IsNullOrWhiteSpace(options.OpenAi.Model),
+
+        "gemini" =>
+            !string.IsNullOrWhiteSpace(options.Gemini.BaseUrl) &&
+            Uri.TryCreate(options.Gemini.BaseUrl, UriKind.Absolute, out _) &&
+            !string.IsNullOrWhiteSpace(options.Gemini.ApiKey) &&
+            !string.IsNullOrWhiteSpace(options.Gemini.Model) &&
+            options.Gemini.OutputDimensionality > 0,
 
         _ => false
     };
@@ -519,8 +573,50 @@ static bool ValidateAnswersProviderOptions(AnswersOptions options)
             !string.IsNullOrWhiteSpace(options.OpenAi.ApiKey) &&
             !string.IsNullOrWhiteSpace(options.OpenAi.Model),
 
+        "deepseek" =>
+            !string.IsNullOrWhiteSpace(options.DeepSeek.BaseUrl) &&
+            Uri.TryCreate(options.DeepSeek.BaseUrl, UriKind.Absolute, out _) &&
+            !string.IsNullOrWhiteSpace(options.DeepSeek.ApiKey) &&
+            !string.IsNullOrWhiteSpace(options.DeepSeek.Model),
+
         _ => false
     };
+}
+
+static void LoadDotEnv()
+{
+    var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+
+    if (!File.Exists(envPath))
+        return;
+
+    foreach (var line in File.ReadAllLines(envPath))
+    {
+        var trimmed = line.Trim();
+
+        if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#'))
+            continue;
+
+        var separatorIndex = trimmed.IndexOf('=');
+
+        if (separatorIndex <= 0)
+            continue;
+
+        var key = trimmed[..separatorIndex].Trim();
+        var value = trimmed[(separatorIndex + 1)..].Trim();
+
+        Environment.SetEnvironmentVariable(key, value);
+    }
+
+    var deepSeekApiKey = Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY");
+
+    if (!string.IsNullOrWhiteSpace(deepSeekApiKey))
+        Environment.SetEnvironmentVariable("Answers__DeepSeek__ApiKey", deepSeekApiKey);
+
+    var geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+
+    if (!string.IsNullOrWhiteSpace(geminiApiKey))
+        Environment.SetEnvironmentVariable("Embeddings__Gemini__ApiKey", geminiApiKey);
 }
 
 abstract record CliCommand;

@@ -1,0 +1,21 @@
+﻿@page
+@model ErrorModel
+@{
+    ViewData["Title"] = "Ошибка";
+}
+
+<div class="shell">
+    <section class="panel glass-panel">
+        <div class="panel-header">
+            <h1>Ошибка</h1>
+            <p>Во время обработки запроса произошла ошибка.</p>
+        </div>
+
+        @if (Model.ShowRequestId)
+        {
+            <p>
+                <strong>Request ID:</strong> <code>@Model.RequestId</code>
+            </p>
+        }
+    </section>
+</div>

@@ -1,17 +1,18 @@
 # Quick start
 
-Практическая инструкция локального запуска проекта с нуля.
+Практическая инструкция локального запуска проекта.
 
-Подробные объяснения архитектуры находятся в [Architecture](./team/architecture.md). Типовые ошибки запуска собраны в [Troubleshooting](./troubleshooting.md).
+Подробная архитектура описана в [Architecture](./team/architecture.md). Типовые ошибки запуска собраны в [Troubleshooting](./troubleshooting.md).
 
 ## 1. Установить зависимости
 
 Нужно установить:
 
-- .NET 8 SDK
-- Docker
-- Python 3.10+
-- Ollama
+- .NET 8 SDK;
+- Docker;
+- Python 3.10+;
+- ffmpeg, если transcription provider требует его для чтения видео;
+- Ollama, если используется локальный provider вместо API providers.
 
 Проверить .NET:
 
@@ -33,12 +34,6 @@ docker compose version
 python --version
 ```
 
-Проверить Ollama:
-
-```bash
-ollama --version
-```
-
 ## 2. Установить Python dependencies
 
 Из корня проекта:
@@ -47,7 +42,11 @@ ollama --version
 pip install -r scripts/python-helper/requirements.txt
 ```
 
-На некоторых системах для транскрибации может потребоваться `ffmpeg`. Если helper падает на чтении видео или аудио, см. [Troubleshooting](./troubleshooting.md).
+Если helper падает на чтении видео или аудио, проверь `ffmpeg`:
+
+```bash
+ffmpeg -version
+```
 
 ## 3. Поднять Qdrant
 
@@ -63,13 +62,13 @@ docker compose up -d
 docker ps
 ```
 
-Qdrant должен быть доступен по адресу:
+Qdrant должен быть доступен:
 
 ```text
 http://localhost:6333
 ```
 
-Qdrant dashboard:
+Dashboard:
 
 ```text
 http://localhost:6333/dashboard
@@ -77,37 +76,59 @@ http://localhost:6333/dashboard
 
 Коллекция Qdrant создаётся приложением автоматически при запуске, если её ещё нет.
 
-## 4. Подготовить Ollama models
+## 4. Настроить providers
 
-Проверить, что Ollama API отвечает:
+По умолчанию проект может использовать API providers для embeddings и генерации ответа.
 
-```powershell
-Invoke-WebRequest http://localhost:11434/api/version
+Создать файл `.env` в корне проекта:
+
+```env
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-Проверить установленные модели:
+Файл `.env` не коммитится в Git.
+
+Основные настройки находятся в:
+
+```text
+appsettings.json
+```
+
+Локальные переопределения можно хранить в:
+
+```text
+appsettings.Local.json
+```
+
+Этот файл не должен коммититься.
+
+## 5. Локальный режим через Ollama
+
+Если нужен локальный режим или нет API-ключей, можно переключиться на Ollama.
+
+Проверить Ollama:
 
 ```bash
-ollama list
+ollama --version
 ```
 
-Подтянуть модель для embeddings:
+Скачать модели:
 
 ```bash
 ollama pull embeddinggemma
-```
-
-Подтянуть модель для генерации ответа:
-
-```bash
 ollama pull llama3.1
 ```
 
-Названия моделей должны совпадать с настройками в `appsettings.json`.
+Создать локальный override-конфиг:
 
-## 5. Проверить конфигурацию
+```powershell
+Copy-Item appsettings.Ollama.example.json appsettings.Local.json
+```
 
-Основные настройки находятся в `appsettings.json`.
+После смены embedding provider или model нужно пересобрать индекс.
+
+## 6. Проверить ключевые настройки
 
 Проверь секции:
 
@@ -120,9 +141,14 @@ Paths
 Chunking
 ```
 
-Важно: `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели.
+Важно:
 
-## 6. Подготовить видео
+- `Qdrant.VectorSize` должен совпадать с размерностью выбранной embedding-модели;
+- embeddings разных моделей нельзя смешивать в одной collection;
+- при смене embedding provider, model, vector size или embedding space нужен rebuild или повторный ingest.
+
+
+## 7. Подготовить видео
 
 Положить локальный видеофайл в папку:
 
@@ -136,7 +162,7 @@ data/videos/
 data/videos/lecture_0.mp4
 ```
 
-## 7. Выполнить ingest
+## 8. Выполнить ingest
 
 Минимальный запуск:
 
@@ -150,9 +176,16 @@ dotnet run -- ingest "data/videos/lecture_0.mp4"
 dotnet run -- ingest "data/videos/lecture_0.mp4" --title "Lecture 0" --language ru --transcription-provider faster-whisper --transcription-model small --overwrite true
 ```
 
-После успешного ingest в консоли должен появиться результат с `LectureId`, `LectureTitle`, `TranscriptPath` и `ChunkCount`.
+После успешного ingest в консоли должны появиться:
 
-## 8. Запустить приложение
+```text
+LectureId
+LectureTitle
+TranscriptPath
+ChunkCount
+```
+
+## 9. Запустить основное приложение
 
 ```bash
 dotnet run
@@ -170,17 +203,14 @@ Health check:
 http://localhost:5000/health
 ```
 
-## 9. Открыть Razor UI
 
-Открыть в браузере:
+Встроенный Razor UI:
 
 ```text
 http://localhost:5000
 ```
 
-Razor UI нужен для локального тестирования вопросов. Основной API-контракт проекта остаётся `POST /ask`.
-
-## 10. Проверить Minimal API /ask
+## 10. Проверить `/ask`
 
 PowerShell:
 
@@ -192,19 +222,24 @@ Invoke-RestMethod `
   -Body '{
     "question": "О чём эта лекция?",
     "topK": 5,
-    "minScore": 0.1
+    "minScore": 0.3
   }'
 ```
 
-Пример тела запроса:
+Пример request body:
 
 ```json
 {
   "question": "О чём эта лекция?",
   "topK": 5,
-  "minScore": 0.1
+  "minScore": 0.3
 }
 ```
+
+Ожидаемый результат:
+
+- `usedContext: true` и ответ с sources;
+- либо `usedContext: false` и fallback-сообщение, если контекста недостаточно.
 
 ## 11. Выполнить rebuild
 
@@ -222,28 +257,82 @@ dotnet run -- rebuild --clear-index-first true
 
 ## 12. Смена embedding model или vector size
 
-Если меняется embedding provider, embedding model или размерность вектора, старый индекс считается несовместимым.
+Если меняется embedding provider, embedding model или vector size, старый индекс считается несовместимым.
 
 Минимальный порядок действий:
 
 1. Остановить приложение.
-2. Обновить `appsettings.json`.
-3. Удалить старую Qdrant collection или volume.
-4. Выполнить `ingest` заново или запустить `rebuild`, если сохранённые `transcript.json` совместимы с новой конфигурацией.
+2. Обновить конфигурацию.
+3. Удалить старую Qdrant collection или volume, если изменилась размерность.
+4. Запустить Qdrant.
+5. Выполнить `ingest` заново или `rebuild`, если transcript-файлы сохранены.
 
-Для удаления всех данных Qdrant volume:
+Удалить все данные Qdrant volume:
 
 ```bash
 docker compose down -v
 docker compose up -d
 ```
 
-После этого снова выполнить ingest:
+Затем снова выполнить ingest или rebuild:
 
 ```bash
 dotnet run -- ingest "data/videos/lecture_0.mp4"
 ```
 
-## 13. Если что-то не запускается
+или:
+
+```bash
+dotnet run -- rebuild
+```
+
+## 13. Запуск Telegram bot
+
+Основное приложение должно быть запущено отдельно:
+
+```bash
+dotnet run
+```
+
+Указать Telegram token.
+
+PowerShell, только для текущей сессии:
+
+```powershell
+$env:Telegram__BotToken="your_bot_token"
+dotnet run --project .\clients\VideoRag.TelegramBot\VideoRag.TelegramBot.csproj
+```
+
+Бот по умолчанию обращается к API:
+
+```text
+http://localhost:5000
+```
+
+Адрес API настраивается в конфигурации клиента через `VideoRagApi:BaseUrl`.
+
+## 14. Запуск отдельного Web UI client
+
+Основное приложение должно быть запущено отдельно:
+
+```bash
+dotnet run
+```
+
+В другом терминале:
+
+```bash
+dotnet run --project .\clients\VideoRag.WebUi\VideoRag.WebUi.csproj
+```
+
+Web UI client обращается к основному API.
+
+Адрес API настраивается в:
+
+```text
+clients/VideoRag.WebUi/appsettings.json
+```
+
+## 15. Если что-то не запускается
 
 См. [Troubleshooting](./troubleshooting.md).
