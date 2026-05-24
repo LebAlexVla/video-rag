@@ -1,4 +1,4 @@
-        # URL audio ingest: backend/core and API smoke tests
+# URL audio ingest: backend/core and API smoke tests
 
         Проверки для сценария:
 
@@ -115,7 +115,7 @@
         $askBody = @{
           question = "О чём была лекция?"
           topK = 5
-          minScore = 0.3
+          minScore = 0.5
         } | ConvertTo-Json
 
         Invoke-RestMethod `

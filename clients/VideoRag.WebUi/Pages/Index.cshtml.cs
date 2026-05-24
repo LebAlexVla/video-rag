@@ -20,7 +20,7 @@ public sealed class IndexModel : PageModel
     public int TopK { get; set; } = 5;
 
     [BindProperty]
-    public double MinScore { get; set; } = 0.0;
+    public double MinScore { get; set; } = 0.5;
 
     [BindProperty]
     public UrlIngestInputModel UrlInput { get; set; } = new();
@@ -82,9 +82,9 @@ public sealed class IndexModel : PageModel
             return;
         }
 
-        if (TopK < 1 || TopK > 20)
+        if (TopK < 1 || TopK > 10)
         {
-            AskErrorMessage = "TopK должен быть от 1 до 20.";
+            AskErrorMessage = "TopK должен быть от 1 до 10.";
             return;
         }
 

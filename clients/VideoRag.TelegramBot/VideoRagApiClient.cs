@@ -15,7 +15,7 @@ public sealed class VideoRagApiClient
 
     public async Task<AskResponseDto?> AskAsync(string question, CancellationToken cancellationToken)
     {
-        var request = new AskRequestDto(Question: question, TopK: 5, MinScore: 0.3);
+        var request = new AskRequestDto(Question: question, TopK: 5, MinScore: 0.5);
         var response = await _httpClient.PostAsJsonAsync("/ask", request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
