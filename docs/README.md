@@ -75,3 +75,24 @@ scripts/python-helper/  Python helper для транскрибации
 docs/                   документация
 data/                   локальные данные проекта
 ```
+
+<!-- URL_AUDIO_INGEST_DOCS_NAV_START -->
+## Проверка URL audio ingest
+
+Для новой возможности добавления лекций по Rutube/VK ссылкам добавлены отдельные test-cases:
+
+- [CLI URL ingest](./test-cases/url-ingest-cli.md)
+- [Backend API URL ingest](./test-cases/url-ingest-backend-api.md)
+- [Razor UI URL ingest](./test-cases/url-ingest-razor-ui.md)
+- [Telegram bot URL ingest](./test-cases/url-ingest-telegram-bot.md)
+- [Final checklist](./test-cases/url-ingest-final-checklist.md)
+
+Smoke scripts:
+
+```text
+scripts/smoke-test-url-ingest-cli.ps1
+scripts/smoke-test-url-ingest-api.ps1
+scripts/smoke-test-url-ingest-webui.ps1
+scripts/smoke-test-url-ingest-telegram.ps1
+```
+<!-- URL_AUDIO_INGEST_DOCS_NAV_END -->

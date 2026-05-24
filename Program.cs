@@ -6,6 +6,7 @@ using VideoLectureRagAssistant.Application.Contracts;
 using VideoLectureRagAssistant.Application.Services;
 using VideoLectureRagAssistant.Infrastructure.Answers;
 using VideoLectureRagAssistant.Infrastructure.Configuration;
+using VideoLectureRagAssistant.Infrastructure.Downloads;
 using VideoLectureRagAssistant.Infrastructure.Embeddings;
 using VideoLectureRagAssistant.Infrastructure.Transcript;
 using VideoLectureRagAssistant.Infrastructure.Transcription;
@@ -90,6 +91,62 @@ static void MapEndpoints(WebApplication app)
                 });
             }
         });
+
+    app.MapPost(
+        "/ingest/url",
+        async Task<Results<Accepted<IngestJobStartResponseDto>, BadRequest<ProblemDetails>>> (
+            IngestUrlRequestDto request,
+            IIngestJobService ingestJobService,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var appRequest = new IngestFromUrlRequest(
+                    url: request.Url,
+                    requestedTitle: request.LectureTitle,
+                    languageHint: request.LanguageHint,
+                    transcriptionProvider: request.TranscriptionProvider,
+                    transcriptionModel: request.TranscriptionModel,
+                    overwrite: request.Overwrite);
+
+                var result = await ingestJobService.StartUrlIngestAsync(appRequest, cancellationToken);
+
+                return TypedResults.Accepted(
+                    $"/ingest/jobs/{result.JobId}",
+                    IngestJobHttpMapper.ToStartDto(result));
+            }
+            catch (ArgumentException ex)
+            {
+                return TypedResults.BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid URL ingest request",
+                    Detail = ex.Message,
+                    Status = StatusCodes.Status400BadRequest
+                });
+            }
+        });
+
+    app.MapGet(
+        "/ingest/jobs/{jobId:guid}",
+        Results<Ok<IngestJobStatusDto>, NotFound<ProblemDetails>> (
+            Guid jobId,
+            IIngestJobService ingestJobService) =>
+        {
+            var result = ingestJobService.GetStatus(jobId);
+
+            if (result is null)
+            {
+                return TypedResults.NotFound(new ProblemDetails
+                {
+                    Title = "Ingest job was not found",
+                    Detail = $"Ingest job '{jobId}' was not found.",
+                    Status = StatusCodes.Status404NotFound
+                });
+            }
+
+            return TypedResults.Ok(IngestJobHttpMapper.ToStatusDto(result));
+        });
+
 }
 
 static bool TryGetCliCommand(string[] args, out CliCommand command)
@@ -107,6 +164,10 @@ static bool TryGetCliCommand(string[] args, out CliCommand command)
             command = ParseIngestCommand(args);
             return true;
 
+        case "ingest-url":
+            command = ParseIngestUrlCommand(args);
+            return true;
+
         case "rebuild":
             command = ParseRebuildCommand(args);
             return true;
@@ -116,7 +177,7 @@ static bool TryGetCliCommand(string[] args, out CliCommand command)
 
         default:
             throw new InvalidOperationException(
-                "Unsupported command. Use one of: api, ingest, rebuild.");
+                "Unsupported command. Use one of: api, ingest, ingest-url, rebuild.");
     }
 }
 
@@ -184,6 +245,70 @@ static CliCommand ParseIngestCommand(string[] args)
             overwrite: overwrite));
 }
 
+static CliCommand ParseIngestUrlCommand(string[] args)
+{
+    if (args.Length < 2)
+    {
+        throw new InvalidOperationException(
+            "Usage: ingest-url <url> [--title \"Lecture title\"] [--language ru] [--transcription-provider faster-whisper] [--transcription-model small] [--overwrite true|false]");
+    }
+
+    var url = args[1];
+    string? requestedTitle = null;
+    string? languageHint = null;
+    string transcriptionProvider = "faster-whisper";
+    string transcriptionModel = "small";
+    var overwrite = true;
+
+    for (var i = 2; i < args.Length; i++)
+    {
+        var key = args[i].Trim().ToLowerInvariant();
+
+        if (i + 1 >= args.Length)
+            throw new InvalidOperationException($"Missing value for argument '{args[i]}'.");
+
+        var value = args[i + 1];
+
+        switch (key)
+        {
+            case "--title":
+                requestedTitle = value;
+                break;
+
+            case "--language":
+                languageHint = value;
+                break;
+
+            case "--transcription-provider":
+                transcriptionProvider = value;
+                break;
+
+            case "--transcription-model":
+                transcriptionModel = value;
+                break;
+
+            case "--overwrite":
+                if (!bool.TryParse(value, out overwrite))
+                    throw new InvalidOperationException("Value for --overwrite must be true or false.");
+                break;
+
+            default:
+                throw new InvalidOperationException($"Unknown ingest-url argument '{args[i]}'.");
+        }
+
+        i++;
+    }
+
+    return new IngestUrlCliCommand(
+        new IngestFromUrlRequest(
+            url: url,
+            requestedTitle: requestedTitle,
+            languageHint: languageHint,
+            transcriptionProvider: transcriptionProvider,
+            transcriptionModel: transcriptionModel,
+            overwrite: overwrite));
+}
+
 static CliCommand ParseRebuildCommand(string[] args)
 {
     var clearIndexFirst = true;
@@ -221,6 +346,10 @@ static async Task ExecuteCliAsync(IServiceProvider services, CliCommand command)
             await ExecuteIngestAsync(scope.ServiceProvider, ingestCommand.Request);
             break;
 
+        case IngestUrlCliCommand ingestUrlCommand:
+            await ExecuteIngestUrlAsync(scope.ServiceProvider, ingestUrlCommand.Request);
+            break;
+
         case RebuildCliCommand rebuildCommand:
             await ExecuteRebuildAsync(scope.ServiceProvider, rebuildCommand.Request);
             break;
@@ -244,6 +373,30 @@ static async Task ExecuteIngestAsync(IServiceProvider services, LectureIngestReq
     }
 
     Console.WriteLine("Ingest completed successfully.");
+    Console.WriteLine($"LectureId: {result.LectureId}");
+    Console.WriteLine($"LectureTitle: {result.LectureTitle}");
+    Console.WriteLine($"TranscriptPath: {result.TranscriptPath}");
+    Console.WriteLine($"ChunkCount: {result.ChunkCount}");
+}
+
+static async Task ExecuteIngestUrlAsync(IServiceProvider services, IngestFromUrlRequest request)
+{
+    var ingestService = services.GetRequiredService<IIngestFromUrlService>();
+
+    Console.WriteLine("Downloading audio and starting ingest...");
+    var result = await ingestService.IngestAsync(request);
+
+    if (!result.Success)
+    {
+        Console.Error.WriteLine("URL ingest failed.");
+        WriteError(result.Error);
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    Console.WriteLine("URL ingest completed successfully.");
+    Console.WriteLine($"SourceUrl: {result.SourceUrl}");
+    Console.WriteLine($"LocalAudioPath: {result.LocalAudioPath}");
     Console.WriteLine($"LectureId: {result.LectureId}");
     Console.WriteLine($"LectureTitle: {result.LectureTitle}");
     Console.WriteLine($"TranscriptPath: {result.TranscriptPath}");
@@ -339,6 +492,20 @@ static void ConfigureOptions(IServiceCollection services, IConfiguration configu
         .ValidateOnStart();
 
     services
+        .AddOptions<AudioDownloaderOptions>()
+        .Bind(configuration.GetSection(AudioDownloaderOptions.SectionName))
+        .Validate(
+            options =>
+                !string.IsNullOrWhiteSpace(options.ExecutablePath) &&
+                !string.IsNullOrWhiteSpace(options.FfmpegExecutablePath) &&
+                !string.IsNullOrWhiteSpace(options.OutputDirectory) &&
+                !string.IsNullOrWhiteSpace(options.Format) &&
+                !string.IsNullOrWhiteSpace(options.AudioFormat) &&
+                !string.IsNullOrWhiteSpace(options.AudioQuality),
+            "Audio downloader configuration is invalid.")
+        .ValidateOnStart();
+
+    services
         .AddOptions<EmbeddingsOptions>()
         .Bind(configuration.GetSection(EmbeddingsOptions.SectionName))
         .Validate(
@@ -411,6 +578,25 @@ static void ConfigureApplicationServices(IServiceCollection services)
     services.AddHostedService<QdrantInitializationService>();
 
     services.AddSingleton<IVideoSource, LocalFileVideoSource>();
+    services.AddSingleton<IAudioSourceUrlClassifier, VideoLectureRagAssistant.Infrastructure.Downloads.AudioSourceUrlClassifier>();
+
+    services.AddSingleton<IAudioDownloader>(serviceProvider =>
+    {
+        var options = serviceProvider.GetRequiredService<IOptions<AudioDownloaderOptions>>().Value;
+
+        return new YtDlpAudioDownloader(
+            sourceUrlClassifier: serviceProvider.GetRequiredService<IAudioSourceUrlClassifier>(),
+            executablePath: options.ExecutablePath,
+            outputDirectory: options.OutputDirectory,
+            format: options.Format,
+            audioFormat: options.AudioFormat,
+            audioQuality: options.AudioQuality,
+            noPlaylist: options.NoPlaylist,
+            ffmpegExecutablePath: options.FfmpegExecutablePath,
+            useStreamingMode: options.UseStreamingFfmpegCopy,
+            fallbackToYtDlpPostProcessing: options.FallbackToYtDlpPostProcessing);
+    });
+
     services.AddSingleton<ITranscriptReader, JsonTranscriptReader>();
 
     services.AddSingleton<IChunker>(serviceProvider =>
@@ -497,6 +683,8 @@ static void ConfigureApplicationServices(IServiceCollection services)
     services.AddSingleton<AnswerGenerator>();
     services.AddSingleton<IContextRetriever, ContextRetriever>();
     services.AddSingleton<IAskService, AskService>();
+    services.AddSingleton<IIngestFromUrlService, IngestFromUrlService>();
+    services.AddSingleton<IIngestJobService, InMemoryIngestJobService>();
 
     services.AddSingleton<ILectureIngestService>(serviceProvider =>
     {
@@ -622,5 +810,7 @@ static void LoadDotEnv()
 abstract record CliCommand;
 
 sealed record IngestCliCommand(LectureIngestRequest Request) : CliCommand;
+
+sealed record IngestUrlCliCommand(IngestFromUrlRequest Request) : CliCommand;
 
 sealed record RebuildCliCommand(LectureRebuildRequest Request) : CliCommand;

@@ -548,3 +548,48 @@ body {
         padding: 18px;
     }
 }
+
+/* URL ingest UI additions */
+
+        .divider {
+            height: 1px;
+            margin: 22px 0;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .ask-panel-header {
+            margin-top: 26px;
+        }
+
+        .secondary-btn {
+            width: 100%;
+            min-height: 50px;
+            border: 1px solid rgba(110, 168, 254, 0.22);
+            border-radius: 16px;
+            padding: 13px 18px;
+            font: inherit;
+            font-weight: 700;
+            color: #dbe7ff;
+            cursor: pointer;
+            background: rgba(110, 168, 254, 0.10);
+            transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .secondary-btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(110, 168, 254, 0.42);
+            background: rgba(110, 168, 254, 0.16);
+        }
+
+        .mono-line {
+            overflow-wrap: anywhere;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            font-size: 0.92rem;
+        }
+
+        .validation {
+            display: block;
+            margin-top: 8px;
+            color: #fecaca;
+            font-size: 0.9rem;
+        }

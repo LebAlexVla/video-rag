@@ -339,3 +339,180 @@ pip install -r scripts/python-helper/requirements.txt
 ```bash
 ffmpeg -version
 ```
+
+<!-- URL_AUDIO_INGEST_TROUBLESHOOTING_START -->
+## URL ingest: `yt-dlp` не найден
+
+### Symptoms
+
+CLI/API job падает на этапе скачивания аудио.
+
+### Cause
+
+`yt-dlp` не установлен или не доступен из PATH.
+
+### Fix
+
+```bash
+python -m pip install -U yt-dlp
+yt-dlp --version
+```
+
+---
+
+## URL ingest: `ffmpeg` не найден
+
+### Symptoms
+
+`yt-dlp` скачивает источник, но не может извлечь/конвертировать аудио.
+
+### Cause
+
+Для `--extract-audio` и `--audio-format mp3` нужен FFmpeg.
+
+### Fix
+
+Установить FFmpeg и проверить:
+
+```bash
+ffmpeg -version
+```
+
+---
+
+## URL ingest: Rutube/VK download failed
+
+### Symptoms
+
+Job завершается со статусом `Failed` на этапе `DownloadingAudio`.
+
+### Possible causes
+
+- ссылка не публичная;
+- видео удалено;
+- видео требует авторизацию;
+- Rutube/VK изменили способ отдачи медиа;
+- старая версия `yt-dlp`.
+
+### Fix
+
+Обновить `yt-dlp`:
+
+```bash
+python -m pip install -U yt-dlp
+```
+
+Проверить ссылку вручную:
+
+```bash
+yt-dlp -f bestaudio/best --extract-audio --audio-format mp3 "URL"
+```
+
+Для MVP приватные видео и видео с авторизацией не поддерживаются.
+
+---
+
+## URL ingest job stuck in `Running`
+
+### Symptoms
+
+`GET /ingest/jobs/{jobId}` долго возвращает `Running`.
+
+### Possible causes
+
+- длинная лекция;
+- медленная транскрибация;
+- завис внешний provider embeddings;
+- проблема с Qdrant;
+- процесс скачивания/транскрибации ждёт системный ресурс.
+
+### Fix
+
+Проверить логи backend API, Qdrant, доступность provider и наличие свободного места на диске.
+
+Для локального MVP job storage in-memory. После перезапуска API старые job status теряются.
+
+---
+
+## Telegram `/add` не работает
+
+### Symptoms
+
+Бот отвечает, что API недоступен, или не может создать ingest job.
+
+### Fix
+
+Проверить:
+
+```powershell
+Invoke-RestMethod http://localhost:5000/health
+```
+
+Проверить конфигурацию клиента:
+
+```text
+clients/VideoRag.TelegramBot/appsettings.json
+VideoRagApi:BaseUrl
+```
+
+Backend API должен быть запущен отдельно.
+<!-- URL_AUDIO_INGEST_TROUBLESHOOTING_END -->
+
+---
+
+## Streaming audio extraction creates no `.mp4.part`
+
+### Symptoms
+
+During Rutube/VK ingest, a large temporary `.mp4.part` file appears in `data/downloads/audio`.
+
+### Cause
+
+The downloader is using yt-dlp post-processing mode. If the platform does not expose an audio-only stream, yt-dlp may first download a muxed video+audio stream and only then extract audio.
+
+### Fix
+
+Use streaming extraction mode:
+
+```json
+"AudioDownloader": {
+  "Format": "bestaudio/worst[acodec!=none]",
+  "AudioFormat": "m4a",
+  "UseStreamingFfmpegCopy": true
+}
+```
+
+In this mode the application resolves a direct media URL through `yt-dlp -g`, then runs `ffmpeg -vn -map 0:a:0 -c:a copy`. The final artifact is audio-only, and a full temporary video file is not accumulated on disk.
+
+If the platform does not provide an audio-only stream, network traffic still includes the smallest available stream that contains audio, but the video stream is not saved as a final artifact.
+
+
+---
+
+## VK direct streaming URL returns 400 Bad Request
+
+### Symptoms
+
+URL ingest fails on VK with an error similar to:
+
+```text
+ffmpeg failed to extract audio from the streamed media URL.
+Server returned 400 Bad Request
+```
+
+### Cause
+
+VK/CDN direct media URLs returned by `yt-dlp -g` may require headers, cookies or challenge handling that plain ffmpeg does not reproduce.
+
+### Fix
+
+Keep automatic fallback enabled:
+
+```json
+"AudioDownloader": {
+  "UseStreamingFfmpegCopy": true,
+  "FallbackToYtDlpPostProcessing": true
+}
+```
+
+The application first tries the fast streaming path. If ffmpeg cannot open the direct URL, it falls back to `yt-dlp --extract-audio`, which handles VK-specific access details.
