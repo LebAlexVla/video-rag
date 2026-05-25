@@ -1,4 +1,4 @@
-﻿@page
+@page
 @model VideoRag.WebUi.Pages.IndexModel
 
 @{
@@ -11,7 +11,7 @@
             <div class="brand-badge">AI • RAG • Lectures</div>
             <h1>Video Lecture RAG Assistant</h1>
             <p class="subtitle">
-                Задавай вопросы по загруженным видео-лекциям и получай ответ с источниками.
+                Добавляй лекции по Rutube/VK-ссылкам, отслеживай обработку и задавай вопросы.
             </p>
         </div>
 
@@ -43,63 +43,154 @@
     <main class="main-grid">
         <section class="panel glass-panel">
             <div class="panel-header">
-                <h2>Новый запрос</h2>
-                <p>Укажи вопрос и параметры поиска контекста.</p>
+                <h2>Добавить лекцию по ссылке</h2>
+                <p>После отправки появится UUID задачи. Статус будет обновляться автоматически.</p>
             </div>
 
-            <form method="post" id="ask-form" class="ask-form">
+            <form method="post" asp-page-handler="StartUrlIngest" class="ask-form">
                 <div class="field">
-                    <label asp-for="Question">Вопрос</label>
-                    <textarea
-                        asp-for="Question"
-                        id="question-box"
-                        rows="7"
-                        placeholder="Например: какие архитектурные решения приняты в проекте и почему?"></textarea>
+                    <label for="UrlInput_Url">Rutube / VK URL</label>
+                    <input id="UrlInput_Url" name="UrlInput.Url" value="@Model.UrlInput.Url" placeholder="https://rutube.ru/video/... или https://vkvideo.ru/video..." />
+                </div>
+
+                <div class="field">
+                    <label for="UrlInput_LectureTitle">Название лекции</label>
+                    <input id="UrlInput_LectureTitle" name="UrlInput.LectureTitle" value="@Model.UrlInput.LectureTitle" placeholder="Например: Лекция по физике" />
+                    <div class="hint">Необязательно, но так проще потом искать источник.</div>
                 </div>
 
                 <div class="params-grid">
                     <div class="field">
-                        <label asp-for="TopK">TopK</label>
-                        <input asp-for="TopK" type="number" min="1" max="10" />
+                        <label for="UrlInput_LanguageHint">Язык</label>
+                        <input id="UrlInput_LanguageHint" name="UrlInput.LanguageHint" value="@Model.UrlInput.LanguageHint" placeholder="ru" />
+                    </div>
+
+                    <div class="field">
+                        <label for="UrlInput_TranscriptionModel">Whisper model</label>
+                        <input id="UrlInput_TranscriptionModel" name="UrlInput.TranscriptionModel" value="@Model.UrlInput.TranscriptionModel" placeholder="tiny / base / small" />
+                        <div class="hint">Для быстрых тестов можно указать tiny или base.</div>
+                    </div>
+                </div>
+
+                <input type="hidden" name="UrlInput.TranscriptionProvider" value="@Model.UrlInput.TranscriptionProvider" />
+
+                <div class="submit-row">
+                    <button type="submit" class="primary-btn">Добавить лекцию</button>
+                </div>
+            </form>
+
+            <div class="tips-card">
+                <div class="tips-title">Проверить статус по UUID</div>
+
+                <form method="post" asp-page-handler="CheckUrlIngestStatus" class="ask-form">
+                    <div class="field">
+                        <label for="StatusJobId">Job UUID</label>
+                        <input id="StatusJobId" name="StatusJobId" value="@Model.StatusJobId" placeholder="UUID задачи после отправки ссылки" />
+                    </div>
+
+                    <div class="submit-row">
+                        <button type="submit" class="primary-btn">Проверить статус</button>
+                    </div>
+                </form>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.IngestErrorMessage))
+            {
+                <div class="message-box message-error">
+                    <div class="message-title">Ошибка обработки</div>
+                    <div>@Model.IngestErrorMessage</div>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.IngestInfoMessage))
+            {
+                <div class="message-box message-warning">
+                    <div class="message-title">Статус</div>
+                    <div>@Model.IngestInfoMessage</div>
+                </div>
+            }
+
+            @if (Model.IngestStartResponse is not null || Model.IngestJobStatus is not null)
+            {
+                var currentJobId = Model.IngestJobStatus?.JobId
+                    ?? Model.IngestStartResponse?.JobId
+                    ?? Guid.Empty;
+
+                <div
+                    id="url-ingest-status"
+                    class="message-box message-warning"
+                    data-job-id="@currentJobId"
+                    data-finished="@(Model.IngestJobStatus is not null && IndexModel.IsFinished(Model.IngestJobStatus) ? "true" : "false")">
+                    <div class="message-title">Обработка лекции</div>
+
+                    <div>
+                        <strong>Job UUID:</strong>
+                        <code id="url-ingest-job-id">@currentJobId</code>
+                    </div>
+
+                    <div style="margin-top: 10px;">
+                        <strong>Текущий статус:</strong>
+                        <span id="url-ingest-status-text">
+                            @(Model.IngestJobStatus is null ? Model.IngestStartResponse?.Status : Model.IngestJobStatus.Status)
+                        </span>
+                    </div>
+
+                    <div style="margin-top: 10px;" id="url-ingest-message">
+                        @(Model.IngestJobStatus is null ? "Задача поставлена в очередь." : IndexModel.BuildIngestStatusMessage(Model.IngestJobStatus))
+                    </div>
+
+                    <div style="margin-top: 10px;" id="url-ingest-final-note">
+                        @if (Model.IngestJobStatus is not null && IndexModel.IsSucceeded(Model.IngestJobStatus))
+                        {
+                            <strong>Лекция добавлена. Теперь можно задавать вопросы.</strong>
+                        }
+                    </div>
+                </div>
+            }
+        </section>
+
+        <section class="panel glass-panel result-panel">
+            <div class="panel-header">
+                <h2>Задать вопрос</h2>
+                <p>Вопрос будет задан по уже проиндексированным лекциям.</p>
+            </div>
+
+            <form method="post" asp-page-handler="Ask" class="ask-form" id="ask-form">
+                <div class="field">
+                    <label for="Question">Вопрос</label>
+                    <textarea
+                        id="Question"
+                        name="Question"
+                        rows="7"
+                        placeholder="Например: какие основные темы объясняются в лекции?">@Model.Question</textarea>
+                </div>
+
+                <div class="params-grid">
+                    <div class="field">
+                        <label for="TopK">TopK</label>
+                        <input id="TopK" name="TopK" value="@Model.TopK" type="number" min="1" max="10" />
                         <div class="hint">Сколько чанков взять из базы.</div>
                     </div>
 
                     <div class="field">
-                        <label asp-for="MinScore">MinScore</label>
-                        <input asp-for="MinScore" type="number" min="0" max="1" step="0.05" />
-                        <div class="hint">Минимальный порог релевантности.</div>
+                        <label for="MinScore">MinScore</label>
+                        <input id="MinScore" name="MinScore" value="@Model.MinScore.ToString(System.Globalization.CultureInfo.InvariantCulture)" type="text" inputmode="decimal" />
+                        <div class="hint">Для проверки можно временно поставить 0. Используйте точку: 0.05.</div>
                     </div>
                 </div>
 
                 <div class="submit-row">
                     <button type="submit" id="submit-button" class="primary-btn">
                         <span class="btn-text">Спросить</span>
-                        <span class="btn-loader hidden"></span>
                     </button>
                 </div>
             </form>
 
-            <div class="tips-card">
-                <div class="tips-title">Подсказки</div>
-                <ul>
-                    <li>Задавай конкретные вопросы.</li>
-                    <li>Если ответ слабый — попробуй увеличить TopK.</li>
-                    <li>Если слишком много шума — увеличь MinScore.</li>
-                </ul>
-            </div>
-        </section>
-
-        <section class="panel glass-panel result-panel">
-            <div class="panel-header">
-                <h2>Ответ</h2>
-                <p>Результат запроса и найденные источники.</p>
-            </div>
-
-            @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+            @if (!string.IsNullOrWhiteSpace(Model.AskErrorMessage))
             {
                 <div class="message-box message-error">
                     <div class="message-title">Ошибка</div>
-                    <div>@Model.ErrorMessage</div>
+                    <div>@Model.AskErrorMessage</div>
                 </div>
             }
 
@@ -143,53 +234,86 @@
 
                                     <div class="source-meta">
                                         <div class="meta-row">
+                                            <span class="meta-label">Позиция</span>
+                                            <span class="meta-value">@source.Position</span>
+                                        </div>
+                                        <div class="meta-row">
                                             <span class="meta-label">Примерная минута</span>
                                             <span class="meta-value">@source.ApproxMinute</span>
                                         </div>
-
-                                        @if (source.ApproxStartSec is not null || source.ApproxEndSec is not null)
-                                        {
-                                            <div class="meta-row">
-                                                <span class="meta-label">Диапазон</span>
-                                                <span class="meta-value">
-                                                    @FormatTime(source.ApproxStartSec) – @FormatTime(source.ApproxEndSec)
-                                                </span>
-                                            </div>
-                                        }
                                     </div>
                                 </div>
                             }
                         </div>
                     </div>
                 }
-                else
-                {
-                    <div class="empty-state small-empty-state">
-                        Источники не вернулись.
-                    </div>
-                }
-            }
-            else
-            {
-                <div class="empty-state">
-                    <div class="empty-icon">✦</div>
-                    <div class="empty-title">Пока нет ответа</div>
-                    <div class="empty-text">
-                        Введи вопрос слева и отправь запрос — ответ появится здесь.
-                    </div>
-                </div>
             }
         </section>
     </main>
 </div>
 
-@functions {
-    private static string FormatTime(double? seconds)
-    {
-        if (seconds is null)
-            return "?";
+<script>
+(function () {
+    const box = document.getElementById("url-ingest-status");
+    if (!box) return;
 
-        var time = TimeSpan.FromSeconds(seconds.Value);
-        return $"{(int)time.TotalMinutes:00}:{time.Seconds:00}";
+    const jobId = box.dataset.jobId;
+    if (!jobId || jobId === "00000000-0000-0000-0000-000000000000") return;
+
+    if (box.dataset.finished === "true") return;
+
+    const statusText = document.getElementById("url-ingest-status-text");
+    const messageBox = document.getElementById("url-ingest-message");
+    const finalNote = document.getElementById("url-ingest-final-note");
+
+    let attempts = 0;
+    const maxAttempts = 720;
+
+    async function poll() {
+        attempts++;
+
+        try {
+            const response = await fetch(`/?handler=IngestStatus&jobId=${encodeURIComponent(jobId)}`, {
+                method: "GET",
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+
+            if (!data.found) {
+                if (messageBox) messageBox.textContent = data.message || "Задача не найдена.";
+                return;
+            }
+
+            if (statusText) statusText.textContent = `${data.status}${data.stage ? " / " + data.stage : ""}`;
+            if (messageBox) messageBox.textContent = data.message || "Обработка идёт.";
+
+            if (data.canAskQuestions) {
+                if (finalNote) {
+                    finalNote.innerHTML = "<strong>Лекция добавлена. Теперь можно задавать вопросы.</strong>";
+                }
+
+                clearInterval(timer);
+                return;
+            }
+
+            if (data.isFinished) {
+                clearInterval(timer);
+            }
+        } catch {
+            // Ignore transient polling errors.
+        }
+
+        if (attempts >= maxAttempts) {
+            clearInterval(timer);
+        }
     }
-}
+
+    const timer = setInterval(poll, 5000);
+    poll();
+})();
+</script>

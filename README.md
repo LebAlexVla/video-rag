@@ -119,3 +119,39 @@ data/registry/     registry для rebuild
 ```
 
 Локальные данные не предназначены для коммита в Git.
+
+<!-- URL_AUDIO_INGEST_README_START -->
+## Добавление лекции по Rutube / VK ссылке
+
+Проект поддерживает добавление лекций по публичным ссылкам Rutube и VK. В этом сценарии скачивается только аудио, после чего запускается обычный ingest pipeline.
+
+CLI:
+
+```bash
+dotnet run -- ingest-url "https://rutube.ru/video/..." --title "Lecture title"
+dotnet run -- ingest-url "https://vk.com/video..." --title "Lecture title"
+```
+
+Backend API для UI и Telegram bot:
+
+```text
+POST /ingest/url
+GET  /ingest/jobs/{jobId}
+```
+
+Проверочные материалы:
+
+```text
+docs/test-cases/url-ingest-final-checklist.md
+scripts/smoke-test-url-ingest-cli.ps1
+scripts/smoke-test-url-ingest-api.ps1
+```
+
+Ограничения MVP:
+
+- поддерживаются публичные Rutube/VK ссылки;
+- приватные видео и видео с авторизацией не поддерживаются;
+- нужен `yt-dlp`;
+- нужен `ffmpeg`;
+- скачивается только аудио, картинка видео не сохраняется как целевой артефакт.
+<!-- URL_AUDIO_INGEST_README_END -->

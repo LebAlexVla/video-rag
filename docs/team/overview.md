@@ -115,3 +115,24 @@ GET  /health
 5. В ответе есть sources.
 6. `rebuild` пересобирает индекс из сохранённых transcript-файлов.
 7. Проект запускается по инструкции из `docs/quick-start.md`.
+
+<!-- URL_AUDIO_INGEST_OVERVIEW_START -->
+## Расширенный сценарий: добавление по Rutube / VK ссылке
+
+Кроме локального файла, администратор может добавить лекцию по публичной Rutube/VK ссылке.
+
+Сценарий:
+
+```text
+Rutube/VK URL
+ -> yt-dlp audio download
+ -> local audio file
+ -> existing ingest pipeline
+ -> transcript
+ -> chunks
+ -> embeddings
+ -> Qdrant
+```
+
+Скачивается только аудио. Клиенты не выполняют скачивание сами: Web UI и Telegram bot вызывают основной HTTP API.
+<!-- URL_AUDIO_INGEST_OVERVIEW_END -->

@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+using System.Net;
+using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using VideoRag.Contracts;
 
@@ -41,14 +42,44 @@ public sealed class VideoRagApiClient
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            throw new InvalidOperationException(
-                $"VideoRag API returned {(int)response.StatusCode}: {body}");
+            throw new InvalidOperationException($"VideoRag API returned {(int)response.StatusCode}: {body}");
         }
 
-        var result = await response.Content.ReadFromJsonAsync<AskResponseDto>(
-            cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<AskResponseDto>(cancellationToken)
+               ?? throw new InvalidOperationException("VideoRag API returned empty response.");
+    }
 
-        return result ?? throw new InvalidOperationException("VideoRag API returned empty response.");
+    public async Task<IngestJobStartResponseDto> StartUrlIngestAsync(
+        IngestUrlRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync("/ingest/url", request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException($"VideoRag API returned {(int)response.StatusCode}: {body}");
+        }
+
+        return await response.Content.ReadFromJsonAsync<IngestJobStartResponseDto>(cancellationToken)
+               ?? throw new InvalidOperationException("VideoRag API returned empty ingest response.");
+    }
+
+    public async Task<IngestJobStatusDto?> GetIngestJobStatusAsync(
+        Guid jobId,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.GetAsync($"/ingest/jobs/{jobId}", cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException($"VideoRag API returned {(int)response.StatusCode}: {body}");
+        }
+
+        return await response.Content.ReadFromJsonAsync<IngestJobStatusDto>(cancellationToken);
     }
 }

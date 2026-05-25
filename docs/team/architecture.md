@@ -720,3 +720,33 @@ Downloader может быть добавлен как implementation `IVideoSou
 - `/ask` возвращает grounded answer или fallback;
 - rebuild остаётся явной операцией;
 - смена embedding space сопровождается пересборкой индекса.
+
+<!-- URL_AUDIO_INGEST_ARCHITECTURE_START -->
+### URL audio ingest flow
+
+URL ingest — это дополнительный вход в существующий ingest pipeline.
+
+```text
+CLI / HTTP API
+ -> IIngestJobService, если сценарий запущен через HTTP
+ -> IIngestFromUrlService
+ -> IAudioDownloader
+ -> local audio file
+ -> ILectureIngestService
+ -> Python helper
+ -> transcript.json
+ -> chunking
+ -> embeddings
+ -> Qdrant
+```
+
+Правила:
+
+- downloader получает только локальный аудиофайл;
+- downloader не транскрибирует;
+- downloader не делает chunking;
+- downloader не строит embeddings;
+- downloader не пишет в Qdrant;
+- UI и Telegram bot не запускают `yt-dlp` напрямую;
+- внешние клиенты вызывают `POST /ingest/url` и `GET /ingest/jobs/{jobId}`.
+<!-- URL_AUDIO_INGEST_ARCHITECTURE_END -->

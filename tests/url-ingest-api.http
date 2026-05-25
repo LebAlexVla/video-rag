@@ -1,0 +1,28 @@
+@baseUrl = http://localhost:5000
+@url = https://rutube.ru/video/REPLACE_ME
+@jobId = REPLACE_WITH_JOB_ID
+
+### Health
+GET {{baseUrl}}/health
+
+### Start URL ingest job
+POST {{baseUrl}}/ingest/url
+Content-Type: application/json
+
+{
+  "url": "{{url}}",
+  "lectureTitle": "HTTP file URL ingest test"
+}
+
+### Get URL ingest job status
+GET {{baseUrl}}/ingest/jobs/{{jobId}}
+
+### Ask after successful ingest
+POST {{baseUrl}}/ask
+Content-Type: application/json
+
+{
+  "question": "О чём была лекция?",
+  "topK": 5,
+  "minScore": 0.5
+}

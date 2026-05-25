@@ -147,6 +147,7 @@ Chunking
 - embeddings разных моделей нельзя смешивать в одной collection;
 - при смене embedding provider, model, vector size или embedding space нужен rebuild или повторный ingest.
 
+
 ## 7. Подготовить видео
 
 Положить локальный видеофайл в папку:
@@ -162,6 +163,72 @@ data/videos/lecture_0.mp4
 ```
 
 ## 8. Выполнить ingest
+
+<!-- URL_AUDIO_INGEST_QUICK_START_START -->
+## Добавление лекции по Rutube / VK ссылке
+
+URL ingest скачивает только аудио из видео и дальше использует обычный ingest pipeline.
+
+Дополнительные зависимости:
+
+```bash
+python -m pip install -U yt-dlp
+ffmpeg -version
+```
+
+CLI:
+
+```bash
+dotnet run -- ingest-url "https://rutube.ru/video/..." --title "Lecture title"
+dotnet run -- ingest-url "https://vk.com/video..." --title "Lecture title"
+```
+
+Backend API должен быть запущен для Web UI и Telegram bot:
+
+```bash
+dotnet run
+```
+
+Запуск URL ingest через HTTP API:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "http://localhost:5000/ingest/url" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body '{
+    "url": "https://rutube.ru/video/...",
+    "lectureTitle": "Lecture title"
+  }'
+```
+
+Проверка статуса:
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:5000/ingest/jobs/<jobId>"
+```
+
+Через Web UI client:
+
+```bash
+dotnet run --project .\clients\VideoRag.WebUi\VideoRag.WebUi.csproj
+```
+
+Открой UI, вставь Rutube/VK ссылку в форму добавления лекции и дождись завершения job.
+
+Через Telegram bot:
+
+```text
+/add https://rutube.ru/video/...
+/status <jobId>
+```
+
+Проверочные сценарии:
+
+```text
+docs/test-cases/url-ingest-final-checklist.md
+```
+<!-- URL_AUDIO_INGEST_QUICK_START_END -->
 
 Минимальный запуск:
 
@@ -201,6 +268,7 @@ Health check:
 ```text
 http://localhost:5000/health
 ```
+
 
 Встроенный Razor UI:
 
@@ -334,3 +402,44 @@ clients/VideoRag.WebUi/appsettings.json
 ## 15. Если что-то не запускается
 
 См. [Troubleshooting](./troubleshooting.md).
+
+---
+
+### Streaming audio mode
+
+URL ingest uses `yt-dlp` and `ffmpeg`.
+
+Recommended config:
+
+```json
+"AudioDownloader": {
+  "ExecutablePath": "yt-dlp",
+  "FfmpegExecutablePath": "ffmpeg",
+  "OutputDirectory": "data/downloads/audio",
+  "Format": "bestaudio/worst[acodec!=none]",
+  "AudioFormat": "m4a",
+  "AudioQuality": "0",
+  "NoPlaylist": true,
+  "UseStreamingFfmpegCopy": true
+}
+```
+
+This avoids saving a complete temporary video file. The final file in `data/downloads/audio` is an audio file, normally `.m4a`.
+
+
+---
+
+### URL ingest progress in Web UI and Telegram
+
+When a Rutube/VK URL ingest starts, the API returns a job UUID.
+
+Web UI shows this UUID after submit and polls the job status automatically. When processing is finished, the page displays that questions can be asked.
+
+Telegram bot commands:
+
+```text
+/add <Rutube or VK URL>
+/status <job UUID>
+```
+
+After `/add`, the bot sends the job UUID and then automatically notifies the chat when the lecture is ready.
