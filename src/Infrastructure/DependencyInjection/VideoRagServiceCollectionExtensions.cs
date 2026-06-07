@@ -118,6 +118,11 @@ public static class VideoRagServiceCollectionExtensions
                     apiKey: options.DeepSeek.ApiKey,
                     modelName: options.DeepSeek.Model),
 
+                "yandex" => new YandexAiStudioAnswerGenerator(
+                    apiKey: options.Yandex.ApiKey,
+                    baseUrl: options.Yandex.BaseUrl,
+                    modelUri: options.Yandex.BuildModelUri()),
+
                 _ => throw new InvalidOperationException("Unsupported answers provider.")
             };
         });

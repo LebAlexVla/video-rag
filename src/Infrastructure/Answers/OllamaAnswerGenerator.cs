@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using VideoLectureRagAssistant.Application.Abstractions;
 using VideoLectureRagAssistant.Application.Contracts;
@@ -31,15 +30,22 @@ public sealed class OllamaAnswerGenerator : IAnswerGenerator
         ArgumentNullException.ThrowIfNull(context);
 
         if (context.Count == 0)
-            return CreateFallback();
+            return GroundedAnswer.CreateFallback();
+
+        var prompt =
+            GroundedAnswer.BuildSystemMessage() +
+            Environment.NewLine +
+            Environment.NewLine +
+            GroundedAnswer.BuildPrompt(request.Question, context);
 
         using var response = await _httpClient.PostAsJsonAsync(
             "/api/generate",
             new
             {
                 model = _modelName,
-                prompt = BuildPrompt(request.Question, context),
-                stream = false
+                prompt,
+                stream = false,
+                format = "json"
             },
             cancellationToken);
 
@@ -54,57 +60,8 @@ public sealed class OllamaAnswerGenerator : IAnswerGenerator
             throw new InvalidOperationException("Ollama response does not contain generated text.");
         }
 
-        var answer = responseElement.GetString()?.Trim();
+        var rawAnswer = responseElement.GetString()?.Trim();
 
-        return new AnswerResult(
-            answer: answer,
-            sources: BuildSources(context),
-            usedContext: true);
-    }
-
-    private static AnswerResult CreateFallback()
-    {
-        return new AnswerResult(
-            answer: null,
-            sources: Array.Empty<SourceCitation>(),
-            usedContext: false,
-            message: "Недостаточно релевантного контекста для уверенного ответа по загруженным лекциям.");
-    }
-
-    private static string BuildPrompt(string question, IReadOnlyList<RetrievedContext> context)
-    {
-        var builder = new StringBuilder();
-
-        builder.AppendLine("Ты отвечаешь только на основе предоставленного контекста по лекциям.");
-        builder.AppendLine("Не добавляй факты вне контекста.");
-        builder.AppendLine();
-        builder.AppendLine("Вопрос:");
-        builder.AppendLine(question);
-        builder.AppendLine();
-        builder.AppendLine("Контекст:");
-
-        for (var i = 0; i < context.Count; i++)
-        {
-            var item = context[i];
-            builder.AppendLine($"[{i + 1}] Лекция: {item.LectureTitle}; Чанк: {item.ChunkIndex}; Минута: {item.ApproxMinute}");
-            builder.AppendLine(item.Text);
-            builder.AppendLine();
-        }
-
-        builder.AppendLine("Сформируй краткий точный ответ только по контексту.");
-
-        return builder.ToString();
-    }
-
-    private static IReadOnlyList<SourceCitation> BuildSources(IReadOnlyList<RetrievedContext> context)
-    {
-        return context
-            .Select(item => new SourceCitation(
-                lectureTitle: item.LectureTitle,
-                chunkIndex: item.ChunkIndex,
-                approxMinute: item.ApproxMinute,
-                approxStartSec: item.ApproxStartSec,
-                approxEndSec: item.ApproxEndSec))
-            .ToArray();
+        return GroundedAnswer.FromModelResponse(rawAnswer, context);
     }
 }

@@ -87,7 +87,7 @@ public static class OptionsRegistrationExtensions
             .Bind(configuration.GetSection(AnswersOptions.SectionName))
             .Validate(
                 options => IsSupportedAnswersProvider(options.Provider),
-                "Answers provider must be 'ollama', 'openai', or 'deepseek'.")
+                "Answers provider must be 'ollama', 'openai', 'deepseek', or 'yandex'.")
             .Validate(
                 ValidateAnswersProviderOptions,
                 "Answers provider configuration is invalid.")
@@ -107,7 +107,8 @@ public static class OptionsRegistrationExtensions
     {
         return string.Equals(provider, "ollama", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(provider, "openai", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(provider, "deepseek", StringComparison.OrdinalIgnoreCase);
+               string.Equals(provider, "deepseek", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(provider, "yandex", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ValidateEmbeddingsProviderOptions(EmbeddingsOptions options)
@@ -160,6 +161,16 @@ public static class OptionsRegistrationExtensions
                 Uri.TryCreate(options.DeepSeek.BaseUrl, UriKind.Absolute, out _) &&
                 !string.IsNullOrWhiteSpace(options.DeepSeek.ApiKey) &&
                 !string.IsNullOrWhiteSpace(options.DeepSeek.Model),
+
+            "yandex" =>
+                !string.IsNullOrWhiteSpace(options.Yandex.BaseUrl) &&
+                Uri.TryCreate(options.Yandex.BaseUrl, UriKind.Absolute, out _) &&
+                !string.IsNullOrWhiteSpace(options.Yandex.ApiKey) &&
+                !string.IsNullOrWhiteSpace(options.Yandex.Model) &&
+                (
+                    options.Yandex.Model.Trim().StartsWith("gpt://", StringComparison.OrdinalIgnoreCase) ||
+                    !string.IsNullOrWhiteSpace(options.Yandex.FolderId)
+                ),
 
             _ => false
         };

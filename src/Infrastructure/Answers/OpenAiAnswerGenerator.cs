@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using VideoLectureRagAssistant.Application.Abstractions;
 using VideoLectureRagAssistant.Application.Contracts;
@@ -40,7 +39,7 @@ public sealed class OpenAiAnswerGenerator : IAnswerGenerator
         ArgumentNullException.ThrowIfNull(context);
 
         if (context.Count == 0)
-            return CreateFallback();
+            return GroundedAnswer.CreateFallback();
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions")
         {
@@ -52,12 +51,12 @@ public sealed class OpenAiAnswerGenerator : IAnswerGenerator
                     new
                     {
                         role = "system",
-                        content = "Ты отвечаешь только на основе предоставленного контекста по лекциям. Не добавляй факты вне контекста."
+                        content = GroundedAnswer.BuildSystemMessage()
                     },
                     new
                     {
                         role = "user",
-                        content = BuildUserMessage(request.Question, context)
+                        content = GroundedAnswer.BuildPrompt(request.Question, context)
                     }
                 },
                 temperature = 0
@@ -76,65 +75,20 @@ public sealed class OpenAiAnswerGenerator : IAnswerGenerator
             choicesElement.ValueKind != JsonValueKind.Array ||
             choicesElement.GetArrayLength() == 0)
         {
-            throw new InvalidOperationException("OpenAI response does not contain choices.");
+            throw new InvalidOperationException("OpenAI-compatible response does not contain choices.");
         }
 
-        var messageElement = choicesElement[0].GetProperty("message");
+        var firstChoice = choicesElement[0];
 
-        if (!messageElement.TryGetProperty("content", out var contentElement) ||
+        if (!firstChoice.TryGetProperty("message", out var messageElement) ||
+            !messageElement.TryGetProperty("content", out var contentElement) ||
             contentElement.ValueKind != JsonValueKind.String)
         {
-            throw new InvalidOperationException("OpenAI response does not contain message content.");
+            throw new InvalidOperationException("OpenAI-compatible response does not contain message content.");
         }
 
-        var answer = contentElement.GetString()?.Trim();
+        var rawAnswer = contentElement.GetString()?.Trim();
 
-        return new AnswerResult(
-            answer: answer,
-            sources: BuildSources(context),
-            usedContext: true);
-    }
-
-    private static AnswerResult CreateFallback()
-    {
-        return new AnswerResult(
-            answer: null,
-            sources: Array.Empty<SourceCitation>(),
-            usedContext: false,
-            message: "Недостаточно релевантного контекста для уверенного ответа по загруженным лекциям.");
-    }
-
-    private static string BuildUserMessage(string question, IReadOnlyList<RetrievedContext> context)
-    {
-        var builder = new StringBuilder();
-
-        builder.AppendLine("Вопрос:");
-        builder.AppendLine(question);
-        builder.AppendLine();
-        builder.AppendLine("Контекст:");
-
-        for (var i = 0; i < context.Count; i++)
-        {
-            var item = context[i];
-            builder.AppendLine($"[{i + 1}] Лекция: {item.LectureTitle}; Чанк: {item.ChunkIndex}; Минута: {item.ApproxMinute}");
-            builder.AppendLine(item.Text);
-            builder.AppendLine();
-        }
-
-        builder.AppendLine("Сформируй точный ответ только по этому контексту.");
-
-        return builder.ToString();
-    }
-
-    private static IReadOnlyList<SourceCitation> BuildSources(IReadOnlyList<RetrievedContext> context)
-    {
-        return context
-            .Select(item => new SourceCitation(
-                lectureTitle: item.LectureTitle,
-                chunkIndex: item.ChunkIndex,
-                approxMinute: item.ApproxMinute,
-                approxStartSec: item.ApproxStartSec,
-                approxEndSec: item.ApproxEndSec))
-            .ToArray();
+        return GroundedAnswer.FromModelResponse(rawAnswer, context);
     }
 }

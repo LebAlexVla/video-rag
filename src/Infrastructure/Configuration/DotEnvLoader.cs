@@ -27,14 +27,38 @@ public static class DotEnvLoader
             Environment.SetEnvironmentVariable(key, value);
         }
 
-        var deepSeekApiKey = Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY");
+        CopyEnvironmentVariable(
+            sourceName: "DEEPSEEK_API_KEY",
+            targetName: "Answers__DeepSeek__ApiKey");
 
-        if (!string.IsNullOrWhiteSpace(deepSeekApiKey))
-            Environment.SetEnvironmentVariable("Answers__DeepSeek__ApiKey", deepSeekApiKey);
+        CopyEnvironmentVariable(
+            sourceName: "GEMINI_API_KEY",
+            targetName: "Embeddings__Gemini__ApiKey");
 
-        var geminiApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+        CopyEnvironmentVariable(
+            sourceName: "YANDEX_API_KEY",
+            targetName: "Answers__Yandex__ApiKey");
 
-        if (!string.IsNullOrWhiteSpace(geminiApiKey))
-            Environment.SetEnvironmentVariable("Embeddings__Gemini__ApiKey", geminiApiKey);
+        CopyEnvironmentVariable(
+            sourceName: "YANDEX_FOLDER_ID",
+            targetName: "Answers__Yandex__FolderId");
+
+        CopyEnvironmentVariable(
+            sourceName: "YANDEX_MODEL",
+            targetName: "Answers__Yandex__Model");
+
+        CopyEnvironmentVariable(
+            sourceName: "YANDEX_BASE_URL",
+            targetName: "Answers__Yandex__BaseUrl");
+    }
+
+    private static void CopyEnvironmentVariable(
+        string sourceName,
+        string targetName)
+    {
+        var value = Environment.GetEnvironmentVariable(sourceName);
+
+        if (!string.IsNullOrWhiteSpace(value))
+            Environment.SetEnvironmentVariable(targetName, value);
     }
 }

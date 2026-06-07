@@ -571,7 +571,7 @@ public sealed class TelegramBotHostedService : BackgroundService
         if (string.IsNullOrWhiteSpace(answer))
             answer = "Не нашёл достаточно контекста для ответа.";
 
-        if (response.Sources.Count == 0)
+        if (!response.UsedContext || response.Sources.Count == 0)
             return TrimForTelegram(answer);
 
         var sources = string.Join(
